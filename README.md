@@ -734,10 +734,11 @@ passed = (
 | **`[CONTEXT]/[DATA]` → 调 call_researcher**（2026-08-05）| `agents/orchestrator.py:781` |
 | **Self-reflection 机制**（2026-08-05）：让 LLM 自己观察 delta，决定下一步策略 | `agents/orchestrator.py:1042` |
 
-#### Self-reflection 机制（2026-08-05 新增）
+#### Self-reflection 机制（2026-08-05 新增 + 2026-08-05 扩展覆盖）
 
-不再写死的「issue → 工具」映射表。Round 2+ 时，prompt 里塞一块：
+不再写死的「issue → 工具」映射表。Round 2+ 时，prompt 里塞一块**通用反思 + 具体 hint**：
 
+**通用部分**（所有 issue 都有）：
 ```markdown
 ## 🪞 上轮修复自检
 
@@ -750,23 +751,33 @@ passed = (
   - 传了 `length_target=1500`
   - 传了 `style_hint` 摘要: '专业严谨,务必补充行业背景...'
 
-**自动推断的根因**:
-⚠️ 本轮字数 = 2088,你上轮传了 length_target=1500 但 article 仍然超长。
-   说明 style_hint 与 length_target 冲突。
-**这轮修法**:
-  - 只传 length_target=1500,不传 style_hint
-  - 或 style_hint 改成「严格精简到 1500 字以内」
-
 **请先思考再决策**:
   1. 上轮我的策略 vs 上轮结果,差距在哪里?
   2. 这个差距的原因是什么?
   3. 这轮怎么调整?
 ```
 
+**具体 hint**（按 issue 类型自动给修复建议）：
+
+| Issue 类型 | 自动推断的根因 | 修复方向 |
+|-----------|--------------|---------|
+| `[LENGTH]` 字数过多/不足 | `length_target` 没传 / 与 `style_hint` 冲突 / 过度精简 | 调 `call_writer` 传 `length_target=Y`，必要时**不传 style_hint** |
+| `[FACTS]` 关键事实未体现 | 没传 `style_hint` / 描述太抽象 | `style_hint` 列出**具体事实关键词** |
+| `[CONTEXT]` 行业背景缺失 | brief 里就没数据，不是文章问题 | 调 **`call_researcher`** + `focus_areas=['行业背景']` |
+| `[DATA]` tool_data 缺类 | researcher 上轮没跑全 plan | 调 **`call_researcher`** + `focus_areas` 指向缺失的类 |
+| 规则层（缺少风险提示 / 标题）| writer 没遵守硬规则 | `style_hint` 列出**要修的具体规则** |
+| `[LLM]` judge 软指标 | 客观性/深度/可读性/逻辑性不足 | `style_hint` 指出**具体维度** |
+| 🚨 禁用词（致命）| writer 用了禁用词 | `style_hint` 明确**改用近义词** |
+
+**设计逻辑**：
+- **观察**（通用）：指标 + delta，让 LLM 看到自己的动作和结果
+- **解释**（具体 hint）：系统自动算好这是哪类反弹，给修复方向
+- **决策**（LLM 自由）：拿到 hint 后自己决定具体调什么参数
+
 LLM 真实反应（trace final_content 抓到）：
 > "✅ length_check.passed: true — 实际 1790 字,落在建议范围 1050-1950 内(**上轮 2088 超长问题已解决,length_target=1500 生效**)"
 
-LLM 自己观察 delta、自己推断根因、自己决定下一步。
+LLM 自己观察 delta、自己看到 hint、自己决定下一步。
 
 ### 数据落盘 & 可追溯
 
@@ -805,7 +816,7 @@ LLM 自己观察 delta、自己推断根因、自己决定下一步。
 - [ ] React/Vue 管理后台（人工审核界面）
 - [ ] A/B 测试框架（不同 prompt / 不同模型对比）
 - [ ] 流式输出（每篇文章生成完立即推送，不等全部跑完）
-- [ ] Self-reflection 加「累计轮次」维度（第 3 轮还失败就强制换工具，不让 LLM 继续死磕）
+- [ ] Self-reflection 加「累计轮次」维度（第 N 轮还失败就强制换工具，不让 LLM 继续死磕）
 
 ---
 
