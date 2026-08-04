@@ -132,21 +132,47 @@ class ReviewerAgent(BaseAgent):
                     issues.append(issue)
                     score -= 8  # 缺失关键事实扣 8 分(中等)
 
-        # 通过条件(2026-08-04 收紧):必须同时满足
+        # ---- 5. brief 数据完整性检查(2026-08-05 新增) ----
+        # 区分「brief 里就有,writer 没用」vs「brief 里就没,writer 没法用」
+        # 触发条件:
+        #   [CONTEXT] industry_context 是空 / 默认「暂无」→ 信息提示(不 block),
+        #             Orchestrator 可选调 call_researcher 补
+        #   [DATA]    tool_data 缺关键类别(limit_up/board_change/financial_report/news)
+        #             → 严重,block pass
+        context_data_check = self._check_brief_data_completeness(draft)
+        if context_data_check.get("missing_context"):
+            issue = f"[CONTEXT] 行业背景信息缺失,需调 researcher 补 research"
+            if issue not in issues:
+                issues.append(issue)
+                # 2026-08-05:不扣分(因为 industry_context 经常缺,扣分会永远 block)
+                # 只在 issues 里出现,Orchestrator 可以选择处理
+        if context_data_check.get("missing_data"):
+            for kind in context_data_check["missing_data"]:
+                issue = f"[DATA] 研究数据不完整:缺少 {kind},需调 researcher 补 research"
+                if issue not in issues:
+                    issues.append(issue)
+                    score -= 5  # 缺失数据扣 5 分(中等,3 分以上还能 pass)
+
+        # 通过条件(2026-08-05 收紧):必须同时满足
         # 1. 分数 >= min_score
         # 2. 无禁用词(致命)
         # 3. 字数检查通过(确定性指标,不再容忍 [LENGTH] issue)
         # 4. LLM judge 没判未通过(LLM 是软指标,但仍要尊重)
         # 5. 关键事实全部覆盖(2026-08-04 新增)
+        # 6. tool_data 完整(2026-08-05 新增:只有 [DATA] 才 block,[CONTEXT] 只提示)
+        # 7. industry_context 缺失(2026-08-05 新增:不 block,只是提示)
         llm_passed = (llm_result or {}).get("passed", True)
         length_passed = length_check.get("passed", True)
         facts_covered = facts_check.get("all_covered", True)
+        data_ok = not context_data_check.get("missing_data")
         passed = (
             score >= config.LLM_REFINEMENT_MIN_SCORE
             and not any("禁用词" in i for i in issues)
             and length_passed         # 2026-08-04 新增:字数必须过
             and llm_passed            # 2026-08-04 新增:LLM judge 也得过
             and facts_covered         # 2026-08-04 新增:关键事实必须覆盖
+            and data_ok               # 2026-08-05 新增:关键数据缺失会 block
+            # 注意:[CONTEXT] 不 block,Orchestrator 可选处理
         )
 
         return {
@@ -157,6 +183,7 @@ class ReviewerAgent(BaseAgent):
             "issues": issues,
             "rule_check": rule_result,
             "facts_check": facts_check,  # 2026-08-04 新增
+            "context_data_check": context_data_check,  # 2026-08-05 新增
             "llm_check": llm_result,
             "length_check": length_check,  # 2026-08 新增:tool 调用结果
             "checklist": checklist,
@@ -406,6 +433,76 @@ class ReviewerAgent(BaseAgent):
             self.logger.warning(f"LLM facts check 失败: {e}")
 
         return missing_facts  # 兜底:维持原判
+
+    # ============= brief 数据完整性检查(2026-08-05 新增) =============
+
+    def _check_brief_data_completeness(self, draft: dict) -> dict:
+        """检查 brief 本身的数据完整性(区分 [FACTS] 和 [CONTEXT]/[DATA])
+
+        目的:让 Orchestrator 知道「数据缺失」和「数据没用上」是两件事:
+        - [FACTS] brief 里有,但 article 没体现 → 调 call_writer 改 style_hint
+        - [CONTEXT] / [DATA] brief 里就没有 → 调 call_researcher 补数据
+
+        Returns:
+            {
+                "missing_context": bool,  # industry_context 空 / 默认值
+                "missing_data": list[str],  # 缺失的 tool_data 类别
+                "context_value": str,  # 实际 industry_context
+                "data_keys": list[str],  # 实际 tool_data 的 keys
+            }
+        """
+        result = {
+            "missing_context": False,
+            "missing_data": [],
+            "context_value": "",
+            "data_keys": [],
+        }
+
+        # 1) 读 brief
+        brief_id = draft.get("brief_id")
+        if not brief_id:
+            # 没有 brief → 没法判断,放行(避免误报)
+            return result
+        try:
+            from tools.persist import load_brief
+            brief = load_brief(brief_id)
+        except Exception as e:
+            self.logger.warning(f"_check_brief_data_completeness 读 brief 失败: {e}")
+            return result
+        if not brief:
+            return result
+
+        # 2) 检查 industry_context
+        ctx = brief.get("industry_context", "") or ""
+        result["context_value"] = ctx.strip()
+        # 触发条件:空 / 默认提示语 / None
+        if not result["context_value"] or result["context_value"] in {
+            "暂无行业背景信息。",
+            "暂无行业背景信息",
+            "(无)",
+            "",
+        }:
+            result["missing_context"] = True
+
+        # 3) 检查 tool_data 关键类别
+        # 期望 4 类:limit_up / board_change / financial_report / news
+        # (对应 Orchestrator 决策用的盘面/异动/财务/新闻)
+        EXPECTED_DATA_KINDS = {
+            "limit_up": "涨停股池(盘面)",
+            "board_change": "板块异动数据",
+            "financial_report": "财务三表",
+            "news": "相关新闻",
+        }
+        tool_data = brief.get("tool_data", {}) or {}
+        result["data_keys"] = list(tool_data.keys())
+        for kind, label in EXPECTED_DATA_KINDS.items():
+            if kind not in tool_data or not tool_data[kind]:
+                # 检查是否完全空(0 条)
+                val = tool_data.get(kind)
+                if not val:  # None / [] / {} / ""
+                    result["missing_data"].append(f"{label}({kind})")
+
+        return result
 
     # ============= Plan-and-Execute 审核(2026-08 新增) =============
 
