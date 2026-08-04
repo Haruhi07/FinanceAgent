@@ -753,6 +753,9 @@ class Orchestrator(BaseAgent):
         last_review_feedback = None
         last_article_json = None
         last_brief_json = None
+        # 2026-08-05 新增:自我反思状态(让 LLM 自己观察 delta,决定是否调整策略)
+        prev_article_snapshot = None   # 上轮 article 的关键指标
+        prev_outer_round = 0            # 用于判断 round 1 vs 后续
 
         while outer_round < max_outer:
             outer_round += 1
@@ -761,10 +764,18 @@ class Orchestrator(BaseAgent):
             # 构造本轮 user message(把上一轮 review 反馈塞进去)
             round_user_msg = user_prompt
             if last_review_feedback:
+                # 2026-08-05:先做 self-reflection(把上轮 article 快照给 LLM,
+                # 让它自己对比 delta、判断策略是否有效)
+                reflection_block = ""
+                if prev_article_snapshot:
+                    reflection_block = self._build_reflection_block(
+                        prev_article_snapshot, final_review, last_review_feedback
+                    )
                 round_user_msg += (
                     f"\n\n## 上一轮 Reviewer 反馈(必须解决这些 issues,不能跳过)\n"
-                    f"{last_review_feedback}\n\n"
-                    f"你的下一步决策(**严格按 issues 类型调工具**):\n"
+                    f"{last_review_feedback}\n"
+                    f"{reflection_block}"
+                    f"\n\n你的下一步决策(**严格按 issues 类型调工具**):\n"
                     f"\n"
                     f"### 🔍 需要补数据类(调 call_researcher,不要调 call_writer)\n"
                     f"- **[CONTEXT] 行业背景信息缺失** → 调 call_researcher,focus_areas=['行业背景','产业链','政策环境'],让 Researcher 重点查 industry 知识\n"
@@ -851,6 +862,10 @@ class Orchestrator(BaseAgent):
                 last_brief_json = json.dumps(round_briefs[-1], ensure_ascii=False, default=str)
             if round_reviews:
                 final_review = round_reviews[-1]
+
+            # 2026-08-05:捕获当前 article 的"指纹"快照,供下轮 self-reflection
+            if final_article:
+                prev_article_snapshot = self._snapshot_article(final_article, final_review)
 
             # 检查是否要继续
             if final_review and final_review.get("passed"):
@@ -1021,3 +1036,117 @@ class Orchestrator(BaseAgent):
             f"4. 根据 review 决定下一步,直到 passed=true\n"
             f"5. 最终输出「TASK_COMPLETE」\n"
         )
+
+    # ============= 2026-08-05 新增:自我反思机制 =============
+
+    def _snapshot_article(self, article: dict, review: dict | None) -> dict:
+        """提取 article 的"指纹",供下轮 self-reflection 对比
+
+        维度:
+        - word_count: 字数
+        - score: 评分
+        - passed: 是否通过
+        - issue_kinds: issues 的种类([LENGTH] / [FACTS] / [CONTEXT] / [DATA])
+        - length_target_used: 当时传的 length_target
+        - style_hint_used: 当时传的 style_hint 摘要
+        """
+        snap = {
+            "word_count": article.get("word_count", 0) or len(article.get("content", "")),
+            "score": (review or {}).get("score", 0),
+            "passed": (review or {}).get("passed", False),
+            "issue_kinds": [],
+            # 2026-08-05:writer 把覆盖参数存到 article,这里读出来供反思
+            "length_target_used": article.get("_length_target") or article.get("_length_override"),
+            "style_hint_used": (
+                article.get("_style_hint")
+                or article.get("_style_override")
+                or ""
+            )[:80],
+        }
+        for issue in (review or {}).get("issues", []):
+            # 抽取 [XXX] 前缀
+            import re as _re
+            m = _re.match(r"\[(\w+)\]", issue)
+            if m:
+                snap["issue_kinds"].append(m.group(1))
+        return snap
+
+    def _build_reflection_block(
+        self, prev_snap: dict, prev_review: dict | None, prev_feedback: str
+    ) -> str:
+        """构建 self-reflection 块,让 LLM 观察 delta 后决定下一步策略
+
+        关键设计:不是给 LLM 一个固定答案,而是把它"上轮的策略"和"上轮的结果"摆出来,
+        让它自己推理:
+          1. 上轮我做了什么?
+          2. 上轮结果是什么?
+          3. delta 显示策略是否有效?
+          4. 下一步该调整什么?
+        """
+        cur_word = prev_snap["word_count"]
+        cur_score = prev_snap["score"]
+        issue_kinds = prev_snap["issue_kinds"]
+        used_lt = prev_snap.get("length_target_used")
+        used_sh = prev_snap.get("style_hint_used", "")
+        prev_passed = prev_snap["passed"]
+
+        # 1) 列出上轮动作
+        action_lines = []
+        if used_lt is not None:
+            action_lines.append(f"  - 传了 `length_target={used_lt}`")
+        if used_sh:
+            action_lines.append(f"  - 传了 `style_hint` 摘要: {used_sh!r}")
+        if not action_lines:
+            action_lines.append("  - (无参数覆盖,完全由 LLM 默认决策)")
+        action_block = "\n".join(action_lines) if action_lines else "  - (无)"
+
+        # 2) 自动推断反弹模式(给 LLM 一个 hint,但不强制)
+        warning = ""
+        if "LENGTH" in issue_kinds:
+            if used_lt is None:
+                warning = (
+                    f"⚠️ **本轮字数 = {cur_word},且你上轮没传 length_target**。\n"
+                    f"这就是字数失控的根因。**这轮必须传 length_target**。\n"
+                )
+            elif used_lt and cur_word > used_lt * 1.2:
+                used_sh_safe = used_sh.replace('"', "'")
+                warning = (
+                    f"⚠️ **本轮字数 = {cur_word},你上轮传了 length_target={used_lt} 但 article 仍然超长**。\n"
+                    f"说明你的 style_hint({used_sh_safe!r}) 给了「加内容」的指令,与 length_target 冲突。\n"
+                    f"**这轮修法**:\n"
+                    f"  - 只传 length_target={used_lt},**不传 style_hint**\n"
+                    f"  - 或 style_hint 改成「严格精简到 {used_lt} 字以内,不要扩充内容」\n"
+                )
+            elif used_lt and cur_word < used_lt * 0.7:
+                warning = (
+                    f"⚠️ **本轮字数 = {cur_word},远低于 length_target={used_lt}**。\n"
+                    f"可能精简过度了。\n"
+                )
+        if "FACTS" in issue_kinds and not used_sh:
+            warning += (
+                f"⚠️ 有关键事实未体现([FACTS]),但你上轮没传 style_hint 提醒 writer 补事实。\n"
+                f"**这轮传 style_hint 列出缺失的事实**。\n"
+            )
+
+        # 3) 输出反思块
+        return (
+            f"\n\n## 🪞 上轮修复自检(2026-08-05 新增,你必须先观察再行动)\n"
+            f"\n"
+            f"**上轮 article 指标**:\n"
+            f"  - 字数: {cur_word}\n"
+            f"  - 评分: {cur_score}/100\n"
+            f"  - 通过: {prev_passed}\n"
+            f"  - issue 类型: {issue_kinds if issue_kinds else '(无)'}\n"
+            f"\n"
+            f"**上轮你调 writer 时传了什么**:\n"
+            f"{action_block}\n"
+            f"\n"
+            f"**自动推断的根因**(仅供参考,你也可以自己推理):\n"
+            f"{warning if warning else '(无明显反弹模式,可按 issue 类型正常选工具)'}\n"
+            f"\n"
+            f"**请先思考再决策**(不要无脑套规则):\n"
+            f"  1. 上轮我的策略 vs 上轮结果,差距在哪里?\n"
+            f"  2. 这个差距的原因是什么?(参数没传对? style_hint 与 length_target 冲突? writer 没遵守?)\n"
+            f"  3. 这轮怎么调整?(只调一个参数 / 换工具 / 同时调?)\n"
+        )
+

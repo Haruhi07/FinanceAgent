@@ -110,6 +110,9 @@ class WriterAgent(BaseAgent):
             "tone": self.tone,
             "mode": "llm_plan" if self.use_llm else "mock",
             "model": config.LLM_MODEL if self.use_llm else None,
+            # 2026-08-05 新增:把覆盖参数存到 article 里,供 Orchestrator self-reflection
+            "_length_target": brief.get("_length_override") or self.target_length,
+            "_style_hint": brief.get("_style_override") or self.tone,
             "ts": datetime.now().isoformat(timespec="seconds"),
         }
 
