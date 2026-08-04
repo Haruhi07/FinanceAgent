@@ -1101,32 +1101,101 @@ class Orchestrator(BaseAgent):
         action_block = "\n".join(action_lines) if action_lines else "  - (无)"
 
         # 2) 自动推断反弹模式(给 LLM 一个 hint,但不强制)
-        warning = ""
+        # 2026-08-05:覆盖所有 issue 类型,让 LLM 看到具体怎么改
+        warnings = []
+
+        # 2a) LENGTH 类型:字数控管
         if "LENGTH" in issue_kinds:
             if used_lt is None:
-                warning = (
-                    f"⚠️ **本轮字数 = {cur_word},且你上轮没传 length_target**。\n"
-                    f"这就是字数失控的根因。**这轮必须传 length_target**。\n"
+                warnings.append(
+                    f"⚠️ [LENGTH] 本轮字数 = {cur_word},你上轮**没传 length_target**。\n"
+                    f"**根因**: 字数失控。\n"
+                    f"**这轮修法**: 必须传 length_target=数字(从 issues 解析出 Y)"
                 )
             elif used_lt and cur_word > used_lt * 1.2:
                 used_sh_safe = used_sh.replace('"', "'")
-                warning = (
-                    f"⚠️ **本轮字数 = {cur_word},你上轮传了 length_target={used_lt} 但 article 仍然超长**。\n"
-                    f"说明你的 style_hint({used_sh_safe!r}) 给了「加内容」的指令,与 length_target 冲突。\n"
+                warnings.append(
+                    f"⚠️ [LENGTH] 本轮字数 = {cur_word},传了 length_target={used_lt} 但 article 仍超长。\n"
+                    f"**根因**: style_hint({used_sh_safe!r}) 给了「加内容」指令,与 length_target 冲突。\n"
                     f"**这轮修法**:\n"
-                    f"  - 只传 length_target={used_lt},**不传 style_hint**\n"
-                    f"  - 或 style_hint 改成「严格精简到 {used_lt} 字以内,不要扩充内容」\n"
+                    f"  - 选 A: 只传 length_target={used_lt},**不传 style_hint**(避免冲突)\n"
+                    f"  - 选 B: style_hint 改成「严格精简到 {used_lt} 字以内,不要扩充内容」"
                 )
             elif used_lt and cur_word < used_lt * 0.7:
-                warning = (
-                    f"⚠️ **本轮字数 = {cur_word},远低于 length_target={used_lt}**。\n"
-                    f"可能精简过度了。\n"
+                warnings.append(
+                    f"⚠️ [LENGTH] 本轮字数 = {cur_word},远低于 length_target={used_lt}。\n"
+                    f"**根因**: 可能精简过度。\n"
+                    f"**这轮修法**: 不传 length_target,只传 style_hint 引导扩充到目标字数"
                 )
-        if "FACTS" in issue_kinds and not used_sh:
-            warning += (
-                f"⚠️ 有关键事实未体现([FACTS]),但你上轮没传 style_hint 提醒 writer 补事实。\n"
-                f"**这轮传 style_hint 列出缺失的事实**。\n"
+
+        # 2b) FACTS 类型:关键事实覆盖
+        if "FACTS" in issue_kinds:
+            if not used_sh:
+                warnings.append(
+                    f"⚠️ [FACTS] 有关键事实未体现,但你上轮没传 style_hint 提醒 writer 补事实。\n"
+                    f"**根因**: style_hint 缺失。\n"
+                    f"**这轮修法**: 传 style_hint,**显式列出缺失的事实**(从 [FACTS] issues 解析)"
+                )
+            else:
+                warnings.append(
+                    f"⚠️ [FACTS] 你已经传了 style_hint 但仍有事实未体现。\n"
+                    f"**根因**: 可能是 style_hint 描述太抽象(writer 没理解要补什么),\n"
+                    f"或 writer 把事实放进了 brief 但没在 article 里写出关键词。\n"
+                    f"**这轮修法**: style_hint 改成更具体的指令,如「必须在文章里出现 XXX / YYY / ZZZ 这几个关键词」"
+                )
+
+        # 2c) [CONTEXT] 行业背景缺失:数据问题,不是文章问题
+        if "CONTEXT" in issue_kinds:
+            warnings.append(
+                f"⚠️ [CONTEXT] 行业背景信息缺失。\n"
+                f"**根因**: brief 里的 industry_context 是空/「暂无」,不是 article 写得不好。\n"
+                f"**这轮修法**: 调 **call_researcher**(不是 call_writer),\n"
+                f"  focus_areas=['行业背景','产业链','政策环境','投资逻辑'],让 Researcher 重新查 industry 知识"
             )
+
+        # 2d) [DATA] tool_data 缺类:数据问题
+        if "DATA" in issue_kinds:
+            warnings.append(
+                f"⚠️ [DATA] 研究数据不完整(brief 的 tool_data 缺关键类别)。\n"
+                f"**根因**: 上轮 researcher 没跑全 plan,或 plan 漏了某个数据源。\n"
+                f"**这轮修法**: 调 **call_researcher**(不是 call_writer),\n"
+                f"  focus_areas 指向缺失的类别(如 ['个股新闻','财务三表']),\n"
+                f"  让 researcher 重跑 plan 补数据"
+            )
+
+        # 2e) 规则层 issues(标题/风险提示/禁用词/内容长度)
+        rule_issues = [i for i in (prev_review or {}).get("issues", [])
+                       if not i.startswith("[") and not i.startswith("  - ")]
+        rule_issues_simple = [i for i in rule_issues
+                              if any(kw in i for kw in
+                                     ["禁用词", "风险", "标题", "内容过短", "内容过长", "中文"])]
+        if rule_issues_simple:
+            warnings.append(
+                f"⚠️ [规则层] 规则检查发现 {len(rule_issues_simple)} 个硬性问题:{rule_issues_simple[:3]}\n"
+                f"**根因**: writer 没遵守硬规则(必含风险提示/标题规范/禁用词等)。\n"
+                f"**这轮修法**: 调 call_writer,style_hint **直接列出要修的规则问题**,\n"
+                f"  如「必须包含「投资有风险,过往业绩不代表未来」结尾段」「标题去掉连续问号」等"
+            )
+
+        # 2f) LLM judge 软指标
+        llm_issues = [i for i in (prev_review or {}).get("issues", []) if i.startswith("[LLM]")]
+        if llm_issues:
+            warnings.append(
+                f"⚠️ [LLM judge] LLM 审核发现 {len(llm_issues)} 个软指标问题:{llm_issues[:3]}\n"
+                f"**根因**: 客观性/深度/可读性/逻辑性 不足。\n"
+                f"**这轮修法**: 调 call_writer,style_hint 指出具体维度(如「加强多空观点的平衡呈现」\n"
+                f"  「增加产业背景分析深度」「段落间逻辑连接更清晰」)"
+            )
+
+        # 2g) 致命:禁用词
+        forbidden_in_review = any("禁用词" in i for i in (prev_review or {}).get("issues", []))
+        if forbidden_in_review:
+            warnings.append(
+                f"🚨 [致命] 出现禁用词!**这是 1 类错误,会直接 block pass**。\n"
+                f"**这轮修法**: 调 call_writer,style_hint 明确说「全文严禁出现 X / Y / Z 词,改用近义词」"
+            )
+
+        warning = "\n\n".join(warnings) if warnings else "(无明显反弹模式,可按 issue 类型正常选工具)"
 
         # 3) 输出反思块
         return (
