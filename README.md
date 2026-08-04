@@ -19,7 +19,7 @@
 - [输出产物](#输出产物)
 - [工具与子 Agent](#工具与子-agent)
 - [ReAct 闭环详解](#react-闭环详解)
-- [Reviewer 三重门禁](#reviewer-三重门禁)
+- [Reviewer 四重门禁](#reviewer-四重门禁)
 - [评估体系](#评估体系)
 - [调试与排查](#调试与排查)
 - [已知限制](#已知限制)
@@ -128,11 +128,11 @@ sequenceDiagram
 
 - **Researcher**：LLM 生成 5 步研究 plan → 按 plan 顺序执行 → 同 tool 连续调用拆成 batch 并行
 - **Writer**：先 LLM 写写作策略（angle/data_points/must_include/tone）→ 单次 LLM 出全文
-- **Reviewer**：LLM 生成 8-10 项 checklist → 按 checklist 逐项审 → 字数 / 关键事实 / LLM 三重门禁
+- **Reviewer**：LLM 生成 8-10 项 checklist → 按 checklist 逐项审 → 字数 / 关键事实 / LLM / 数据完整性 四重门禁
 
 子 Agent 之间**不直接通信**，完全由 Orchestrator 决定调用顺序、传什么 prompt。
 
-### 5. Reviewer 三重门禁
+### 5. Reviewer 四重门禁
 
 每篇文章必须同时通过：
 
@@ -504,12 +504,17 @@ flowchart TB
     Inner --> Call[LLM chat_with_tools<br/>工具:call_researcher/writer/reviewer]
     Call --> Check{review.passed?}
     Check -->|true| Done([TASK_COMPLETE])
-    Check -->|false| Parse[解析 issues]
+    Check -->|false| Reflect[🪞 Self-Reflection<br/>2026-08-05 新增]
+    Reflect --> Parse[解析 issues]
     Parse --> L{issues 类型}
+    L -->|[CONTEXT] 行业背景缺失| R1[call_researcher<br/>focus_areas=[行业背景]]
+    L -->|[DATA] tool_data 缺类| R2[call_researcher<br/>补具体数据]
     L -->|[LENGTH] 字数过多/不足| W1[call_writer<br/>传 length_target=Y]
     L -->|[FACTS] 关键事实未体现| W2[call_writer<br/>style_hint 列缺失事实]
     L -->|其他 issues| W3[call_writer<br/>style_hint 改 prompt]
-    W1 --> Rev[call_reviewer<br/>再次验证]
+    R1 --> Rev[call_reviewer<br/>再次验证]
+    R2 --> Rev
+    W1 --> Rev
     W2 --> Rev
     W3 --> Rev
     Rev --> Check
@@ -523,9 +528,18 @@ flowchart TB
 - 外层修复循环最多 3 轮
 - 外层用完仍 `passed=False` → 记到 `failed_articles`，**不发**
 
+**🪞 Self-Reflection（2026-08-05 新增）**：
+Round 2+ 时，prompt 头部塞一块「上轮修复自检」：
+- 上轮 article 指标（字数/评分/issue 类型）
+- 上轮你调 writer 时传了什么（length_target / style_hint）
+- 自动推断的反弹根因（如 style_hint 与 length_target 冲突）
+- 提示 LLM **先思考再决策**
+
+让 LLM 自己观察 delta，自己决定策略，不再写死 if-else 规则。
+
 ---
 
-## Reviewer 三重门禁
+## Reviewer 四重门禁
 
 ```python
 passed = (
@@ -534,6 +548,8 @@ passed = (
     and length_passed                    # 2. 字数(确定性)
     and llm_passed                       # 3. LLM judge(软指标)
     and facts_covered                    # 4. 关键事实覆盖(2026-08-04 新增)
+    and data_ok                          # 5. tool_data 完整(2026-08-05 新增)
+    # 注意:[CONTEXT] 不 block,只作为信息提示
 )
 ```
 
@@ -618,9 +634,11 @@ flowchart LR
 | 异动是什么 | `output/anomalies/*.json` |
 | 候选有哪些 | `output/candidates/*.json` |
 | 文章引用了哪个 brief | 文章头 `> 研究简报:...` |
+| Brief 全量数据(plan/tool_data/key_facts) | `output/briefs/*.json` |
 | ReAct 怎么决策的 | `output/react_traces/*.json` |
 | LLM 完整 CoT | 日志里的 `🧠 reasoning` 块 |
 | LLM 工具调用 | 日志里的 `🔧 tool_calls` 块 |
+| 失败未发布的文章 | `WM.failed_articles`（不落盘）|
 
 ### 常见问题
 
@@ -628,7 +646,7 @@ flowchart LR
 A: Researcher 的 plan prompt 之前硬编码了 "002931"，LLM 抄作业。已修：先 `_prefetch_real_symbols()` 拿真实涨停股代码塞到 prompt 里，强制 LLM 从中选。
 
 **Q: 字数过多但还是发布了**  
-A: Reviewer 之前 passed 条件只挡 "禁用词"，[LENGTH] 只扣 5 分（95 分照样过）。已修：passed 必须同时满足 `length_passed + llm_passed + facts_covered`。
+A: Reviewer 之前 passed 条件只挡 "禁用词"，[LENGTH] 只扣 5 分（95 分照样过）。已修：passed 必须同时满足 `length_passed + llm_passed + facts_covered + data_ok`。
 
 **Q: Orchestrator 直接 TASK_COMPLETE 没修 issues**  
 A: 加了硬性规则：passed=false 时严禁直接 TASK_COMPLETE，必须先调 writer/researcher 修复再 review。
@@ -639,8 +657,25 @@ A: 之前 top-1 模式只发 1 个。已切到 Top-N 并行（默认 5 candidate
 **Q: brief 跑了就丢**  
 A: 已加 `output/briefs/`，每条 brief 落盘 JSON，文章头带路径引用。
 
+**Q: 异常 JSON 里 symbols 重复（同一只股出现 3 次）**  
+A: 之前 3 天扫描时，limit_up 列表没去重。已修：`_detect_board_resonance` 用 `dict.fromkeys()` 去重，`limit_up_count` 也改成去重后的数量（新增 `total_signals` 字段记录原始数）。
+
+**Q: LLM 修字数反而越改越长**  
+A: 因为 style_hint 给了"加内容"指令（"务必补充行业背景"等），与 length_target 冲突。已加 Self-Reflection 机制：round 2+ 把上轮字数 / length_target / style_hint 摆出来，让 LLM 自己看到"上轮传了 length_target=1500 但文章反而变长"，自己决定下轮怎么改。
+
+**Q: Reviewer 提示"行业背景信息缺失"但文章里没用到**  
+A: 这是 `[CONTEXT]` issue，**不 block pass**（只作为信息提示），让 Orchestrator 看到后调 call_researcher 补数据。如果想严格 block，调 reviewer.py 把 `data_ok` 改成也检查 `context_ok`。
+
+**Q: Orchestrator 永远不调 call_researcher 补数据**  
+A: 之前 prompt 写死的「缺数据→call_researcher」规则没生效（Reviewer 实际给的 issue 都是 [LENGTH]/[FACTS]）。已加 `[CONTEXT]` / `[DATA]` 两类 issue：
+- `[CONTEXT] 行业背景信息缺失` → 调 call_researcher + focus_areas=["行业背景"]
+- `[DATA] 研究数据不完整:缺少 XXX` → 调 call_researcher 补具体数据
+
 **Q: 网络超时 / 工具失败**  
 A: 必加 `--no-proxy`（`push2.eastmoney.com` 在 clash 代理下会卡）。失败的工具有重试 + 隔离，单个失败不影响整体。
+
+**Q: plan 步骤报 `asyncio.run() cannot be called from a running event loop`**  
+A: Researcher 内部 `asyncio.run` 嵌套在 orchestrator 的 `tool_executor` 内部会冲突。已修：researcher 用 `_call_handler_sync()` 直接调同步 handler，绕过 asyncio 包装。
 
 ---
 
@@ -654,6 +689,113 @@ A: 必加 `--no-proxy`（`push2.eastmoney.com` 在 clash 代理下会卡）。�
 
 ---
 
+## 📋 增量改造日志（2026-08-04 / 05）
+
+本节记录 2026-08-04 起的全部增量改造。前面章节讲的是**整体架构**，这里讲**踩坑修 bug**。
+
+### Researcher 改进
+
+| 改动 | 原因 | 关键文件 |
+|------|------|---------|
+| `_prefetch_real_symbols()`：先跑 `get_limit_up_pool` 把真实股票代码塞到 plan prompt | LLM 之前会编 6 位股票代码（如 `002931`），5 篇文章的财务数据完全相同 | `agents/researcher.py:347` |
+| `_call_handler_sync()`：直接调同步 handler，避开 `asyncio.run()` 嵌套冲突 | plan 步骤在 orchestrator 的 `tool_executor` 内部调 `asyncio.run` 会触发「cannot be called from a running event loop」 | `agents/researcher.py:296` |
+| `get_limit_down_pool` 已加入 registry | 但还没加入 plan prompt，LLM 不知道这个工具存在 | `tools/agent_tools.py` |
+
+### Reviewer 四重门禁（2026-08-05 升级）
+
+```python
+passed = (
+    score >= 85
+    and not any("禁用词" in i for i in issues)
+    and length_passed            # 1. 字数（确定性）
+    and llm_passed               # 2. LLM judge（软指标）
+    and facts_covered            # 3. 关键事实覆盖（2026-08-04 新增）
+    and data_ok                  # 4. tool_data 完整（2026-08-05 新增）
+    # [CONTEXT] 不 block,只作为信息提示
+)
+```
+
+| 检查 | 实现 | 行为 |
+|------|------|------|
+| 字数 | `check_article_length` tool | 不通过 → `[LENGTH]` issue, block pass |
+| LLM judge | `_llm_judge_with_checklist` | 不通过 → `[LLM]` issues, block pass |
+| 关键事实覆盖（2026-08-04 新增）| `_check_key_facts_coverage`：从 `article.brief_id` 读 brief，规则层抽关键词 + LLM 兜底 | 不通过 → `[FACTS] 关键事实未体现: XXX`, block pass |
+| 行业背景（2026-08-05 新增）| `_check_brief_data_completeness`：检查 `industry_context` 是否为空 | `[CONTEXT]` issue, **不 block**（仅提示）|
+| 关键数据完整性（2026-08-05 新增）| 检查 `tool_data` 4 类数据是否齐全 | `[DATA]` issue, block pass |
+
+### Orchestrator 决策机制升级
+
+| 改动 | 关键文件 |
+|------|---------|
+| **Top-N 并行**：默认 5 candidates × 3 workers | `agents/orchestrator.py:598` |
+| **外层 close-loop**：review 不过 → 自动调 writer/researcher 修复 → 再 review，最多 3 轮 | `agents/orchestrator.py:757` |
+| **失败不落盘**：3 轮还没过 → 记到 `failed_articles`，**不发布** | `agents/orchestrator.py:907` |
+| **硬性规则**：review 没过时严禁直接 TASK_COMPLETE | `agents/orchestrator.py:795` |
+| **`[CONTEXT]/[DATA]` → 调 call_researcher**（2026-08-05）| `agents/orchestrator.py:781` |
+| **Self-reflection 机制**（2026-08-05）：让 LLM 自己观察 delta，决定下一步策略 | `agents/orchestrator.py:1042` |
+
+#### Self-reflection 机制（2026-08-05 新增）
+
+不再写死的「issue → 工具」映射表。Round 2+ 时，prompt 里塞一块：
+
+```markdown
+## 🪞 上轮修复自检
+
+**上轮 article 指标**:
+  - 字数: 2088
+  - 评分: 95/100
+  - issue 类型: ['LENGTH', 'CONTEXT']
+
+**上轮你调 writer 时传了什么**:
+  - 传了 `length_target=1500`
+  - 传了 `style_hint` 摘要: '专业严谨,务必补充行业背景...'
+
+**自动推断的根因**:
+⚠️ 本轮字数 = 2088,你上轮传了 length_target=1500 但 article 仍然超长。
+   说明 style_hint 与 length_target 冲突。
+**这轮修法**:
+  - 只传 length_target=1500,不传 style_hint
+  - 或 style_hint 改成「严格精简到 1500 字以内」
+
+**请先思考再决策**:
+  1. 上轮我的策略 vs 上轮结果,差距在哪里?
+  2. 这个差距的原因是什么?
+  3. 这轮怎么调整?
+```
+
+LLM 真实反应（trace final_content 抓到）：
+> "✅ length_check.passed: true — 实际 1790 字,落在建议范围 1050-1950 内(**上轮 2088 超长问题已解决,length_target=1500 生效**)"
+
+LLM 自己观察 delta、自己推断根因、自己决定下一步。
+
+### 数据落盘 & 可追溯
+
+| 改动 | 文件 | 说明 |
+|------|------|------|
+| Brief 落盘到 `output/briefs/YYYYMMDD_HHMMSS_<subject>_<brief_id>.json` | `tools/persist.py:42` | 文章头 `> 研究简报:output/briefs/...` 引用 |
+| Article 头带 brief 路径（不再下放简报摘要/关键事实到正文）| `agents/orchestrator.py:502` | 正文干净 |
+| 异常去重（`board_resonance` 同一只股 3 天出现算 1 次 unique）| `agents/anomaly_detector.py:78` | 修复前 `symbols: ['神雾节能', '盈峰环境', '神雾节能', '盈峰环境', ...]` |
+| `_short_unwrap` 工具结果截断改成 list-level（不再 string-level 截断）| `tools/llm_client.py` | 避免 JSON 截断导致下游解析失败 |
+
+### 安全 / 配置
+
+| 改动 | 说明 |
+|------|------|
+| API key 走环境变量 | `LLM_API_KEY = ""`（从 `DEEPSEEK_API_KEY` / `DEEPSEEK_API` 读）|
+| `.gitignore` 屏蔽 `output/ cache/ data/ .env *.log` | 不入 GitHub |
+| `disable_proxy.py` 处理 `--no-proxy` | 解决 clash 代理对 `push2.eastmoney.com` 的兼容问题 |
+| `DISABLED_TOOLS` 列出 7 个网络不通的接口 | 避免单点失败拖垮整体 |
+
+### 调试
+
+- 跑出问题先看 `output/logs/run_*.log`（有完整 trace）
+- LLM 完整 CoT 在日志里的 `🧠 reasoning` 块
+- 工具调用在 `🔧 tool_calls` 块
+- ReAct 决策轨迹在 `output/react_traces/YYYYMMDD_HHMMSS.json`
+- 调 `output/briefs/*.json` 查 brief 全量数据（plan / tool_data / key_facts / research_summary）
+
+---
+
 ## 后续优化方向
 
 - [ ] `get_limit_down_pool` 加入 Researcher plan prompt（跌停信号也用上）
@@ -663,6 +805,7 @@ A: 必加 `--no-proxy`（`push2.eastmoney.com` 在 clash 代理下会卡）。�
 - [ ] React/Vue 管理后台（人工审核界面）
 - [ ] A/B 测试框架（不同 prompt / 不同模型对比）
 - [ ] 流式输出（每篇文章生成完立即推送，不等全部跑完）
+- [ ] Self-reflection 加「累计轮次」维度（第 3 轮还失败就强制换工具，不让 LLM 继续死磕）
 
 ---
 
