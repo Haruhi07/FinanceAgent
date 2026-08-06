@@ -1,6 +1,6 @@
 # 热点建模：6 维特征向量（详细公式）
 
-> 本文档从 README 的 `#### Section 2.1.1` 拆出来，专门讲 6 维特征向量的公式推导与代码映射。
+> 本文档介绍热点的 6 维特征向量的公式与代码映射。目前的设计较为简单，主要为了验证系统的可行性，实际生产中应替换为更有效的数学模型。
 > 代码实现见 `agents/hotspot_detector.py:_build_candidate()`（第 99-196 行）。
 
 ---
@@ -23,6 +23,8 @@ $$\text{Score}(H) = w^T \mathbf{H}, \quad w = (0.22, 0.11, 0.11, 0.17, 0.17, 0.2
 
 $$I = \min\left(\max_{t \in \text{types}}\big(\text{score}_{type}(t)\big) + \min(N, 10) \times 0.02,\ 1.0\right)$$
 
+<div align="center">
+
 | 异常类型 | 基础分 |
 |---------|--------|
 | `change_with_limitup` | 1.0 |
@@ -30,6 +32,8 @@ $$I = \min\left(\max_{t \in \text{types}}\big(\text{score}_{type}(t)\big) + \min
 | `board_resonance` | 0.7 |
 | `risk_concentration` | 0.5 |
 | 其他 | 0.4 |
+
+</div>
 
 - 取本组最强异常类型的得分
 - 信号量（涨停股数 / 异动次数）每多 1 个加 0.02，最多加 0.20
@@ -68,7 +72,6 @@ $$N = \max(0,\ 1 - |\text{similar}| \times 0.2)$$
 
 - 去 EpisodicMemory 找相似历史案例
 - 0 相似 = 1.0（全新），1 相似 = 0.8，2 相似 = 0.6，≥5 相似 = 0.0
-- TODO：升级向量检索（FAISS / Milvus）替代关键词匹配
 
 **代码**：`agents/hotspot_detector.py` 第 125-127 行
 
@@ -90,6 +93,8 @@ $$R = \begin{cases} 0.9 & \text{if 行业在 SM 知识图谱} \\ 0.5 & \text{els
 
 $$D = \text{map}_{density}(\text{primary\_type})$$
 
+<div align="center">
+
 | 异常类型 | 价值密度 |
 |---------|---------|
 | `change_with_limitup` | 0.9 |
@@ -97,6 +102,8 @@ $$D = \text{map}_{density}(\text{primary\_type})$$
 | `board_resonance` | 0.7 |
 | `risk_concentration` | 0.6 |
 | 其他 | 0.5 |
+
+</div>
 
 - 取 `anomaly_types[0]`（第一个异常类型）的固定密度值
 - 跟 Intensity 的 max 不同：这里只看主类型
@@ -129,6 +136,8 @@ $$
 
 $$\text{confidence} = \begin{cases} \text{high} & \text{if Score} \geq 0.75 \\ \text{mid} & \text{if Score} \geq 0.55 \\ \text{low} & \text{otherwise} \end{cases}$$
 
+<div align="center">
+
 | score | confidence | Orchestrator 处理 |
 |-------|-----------|------------------|
 | ≥ 0.75 | high | 直接 ReAct 跑 |
@@ -136,9 +145,13 @@ $$\text{confidence} = \begin{cases} \text{high} & \text{if Score} \geq 0.75 \\ \
 | 0.35-0.55 | low | 只观察，不写文章 |
 | < 0.35 | — | 过滤掉 |
 
+</div>
+
 ---
 
-## 改进方向
+## 未来可能改进方向
+
+<div align="center">
 
 | 维度 | 当前实现 | 改进 |
 |------|---------|------|
@@ -149,4 +162,5 @@ $$\text{confidence} = \begin{cases} \text{high} & \text{if Score} \geq 0.75 \\ \
 | **$R$** | 行业知识图谱命中 | 加"政策窗口期"（两会/季报/年报）|
 | **$D$** | 异常类型映射 | 改成"writer 实际能写多少字 / 字数预估" |
 
-> **2026-08-06 更新**: 原 7 维中的 $L$ Lead Time(提前量) 已移除。理由: Lead Time = "与竞品发现热点的时间差",本系统无外部竞品数据源,理论上是未知量; 更适合作为 evaluation 阶段的指标(对比竞品发布时间),而非 hotspot 建模维度。
+</div>
+
