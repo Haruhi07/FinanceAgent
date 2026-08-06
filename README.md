@@ -414,4 +414,5 @@ output/
 
 - **代码**: 本项目代码由 [Minimax Code](https://github.com/MiniMax-AI/MiniMax-Code) 辅助完成
 - **LLM**: 本项目Agent均使用 [DeepSeek-V4-Flash-0731](https://platform.deepseek.com/) 作为LLM
+- **数据源**: 本项目文章引用的股票数据均来自 [akshare](https://akshare.akfamily.xyz/)
 
