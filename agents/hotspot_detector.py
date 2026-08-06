@@ -1,17 +1,21 @@
 """
-Hotspot Detector - 热点识别 + 7 维评分
+Hotspot Detector - 热点识别 + 6 维评分
 =======================================
 
-核心:把 anomalies 转化为带 7 维特征向量的候选热点
+核心:把 anomalies 转化为带 6 维特征向量的候选热点
 
-H = (I, P, V, N, R, D, L)
+H = (I, P, V, N, R, D)
 - I: Intensity 强度
 - P: Persistence 持续性
 - V: Virality 传播性
 - N: Novelty 新颖度
 - R: Relevance 主体关联性
 - D: Value Density 价值密度
-- L: Lead Time 提前量
+
+注:Lead Time(提前量)从 7 维移除(2026-08-06),理由:
+- 理论上是「与竞品发现时间差」,需要外部竞品数据,本系统没有
+- 更适合作为 evaluation 阶段的指标,而不是 hotspot 建模维度
+- 因为它不在「客观可观测的 anomaly 信号」范畴内
 
 Score(H) = w^T * H + b, w 在 config.WEIGHTS
 """
@@ -48,7 +52,7 @@ class HotspotDetector(BaseAgent):
         # ---- 1. 把 anomalies 按"主体"聚类 ----
         grouped = self._group_by_subject(anomalies)
         
-        # ---- 2. 对每个组,提取 7 维特征并打分 ----
+        # ---- 2. 对每个组,提取 6 维特征并打分 ----
         candidates = []
         for subject, group in grouped.items():
             candidate = self._build_candidate(subject, group)
@@ -98,7 +102,7 @@ class HotspotDetector(BaseAgent):
     
     def _build_candidate(self, subject: str, group: list[dict]) -> dict:
         """构建单个候选热点"""
-        # ---- 7 维特征 ----
+        # ---- 6 维特征 ----
         
         # I: Intensity - 强度(基于异常类型 + count)
         anomaly_types = [a.get("anomaly_type", "") for a in group]
@@ -142,10 +146,11 @@ class HotspotDetector(BaseAgent):
             "board_resonance": 0.7,
             "risk_concentration": 0.6,
         }.get(anomaly_types[0] if anomaly_types else "", 0.5)
-        
-        # L: Lead Time - 提前量(原型里给一个基础分,生产应该从历史数据学)
-        lead_time = 0.6  # 默认中等
-        
+
+        # 注:Lead Time 维度已移除(2026-08-06)
+        # 理由:Lead Time = 与竞品发现时间差,需要外部竞品数据,本系统没有
+        # 更适合作为 evaluation 指标(后续看是否有竞品数据源再补回)
+
         # ---- 综合评分 ----
         weights = config.WEIGHTS
         score = (
@@ -154,8 +159,7 @@ class HotspotDetector(BaseAgent):
             weights["virality"] * virality +
             weights["novelty"] * novelty +
             weights["relevance"] * relevance +
-            weights["value_density"] * value_density +
-            weights["lead_time"] * lead_time
+            weights["value_density"] * value_density
         )
         
         # 风险信号降权
@@ -186,7 +190,7 @@ class HotspotDetector(BaseAgent):
                 "novelty": round(novelty, 3),
                 "relevance": round(relevance, 3),
                 "value_density": round(value_density, 3),
-                "lead_time": round(lead_time, 3),
+                # Lead Time 已移除(2026-08-06)
             },
             "score": round(score, 3),
             "confidence": confidence,

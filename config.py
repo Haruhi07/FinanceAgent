@@ -38,15 +38,16 @@ HOTSPOT_HIGH_CONF = 0.75                 # 高确信度,直接写稿
 HOTSPOT_MID_CONF = 0.55                  # 中等,人工确认
 HOTSPOT_LOW_CONF = 0.35                  # 低,持续观察
 
-# 评分权重(对应方案中的 7 维特征向量)
+# 评分权重(对应方案中的 6 维特征向量,Lead Time 已移除)
 WEIGHTS = {
-    "intensity": 0.20,
-    "persistence": 0.10,
-    "virality": 0.10,
-    "novelty": 0.15,
-    "relevance": 0.15,
-    "value_density": 0.20,
-    "lead_time": 0.10,
+    # 2026-08-06:Lead Time 维度移除(它应该是 evaluation 指标,不是建模维度)
+    # 重新归一化使权重和 = 1.0
+    "intensity": 0.22,
+    "persistence": 0.11,
+    "virality": 0.11,
+    "novelty": 0.17,
+    "relevance": 0.17,
+    "value_density": 0.22,
 }
 
 # ============ 缓存 ============

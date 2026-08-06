@@ -1,10 +1,10 @@
 # 财经热点发现与内容生产 Multi-Agent 系统
 
-> 基于 akshare + DeepSeek 的端到端热点发现 + 内容生产流水线  
-> Orchestrator 用 ReAct 模式自主调度 3 个子 Agent（Researcher / Writer / Reviewer）  
-> 每个子 Agent 内部用 Plan-and-Execute，支持并行 sub-agent  
-> Top-N candidates 并行处理，从"扫一次出 1 篇"到"扫一次出 5 篇"
-
+> 当前的财经热点内容写作往往依赖于竞品网站已发布的内容，这也导致热点文章的创作和发布在时间上存在滞后性，内容上存在跟随性等问题。
+> 本方案提出一个财经热点发现与内容生产 Multi-Agent 系统，通过机器学习算法自动识别市场异动。
+> 本方案将内容创作的触发点前移至金融市场信号，从而解决了热点发现的滞后性问题。
+> 另一方面，本方案把内容生产环节Agent化，用一个Orchestrator Agent总体调控内容生产步骤，指挥三个独立的Agent分别独立完成调研、写作、审阅等任务。
+> 不同层级的Agent采用不同的设计范式，通过互相协作完成数据调研-文本写作-审阅修改的闭环，从而提高生成的热点内容的质量。
 ---
 
 ## 目录
@@ -27,30 +27,57 @@
 
 ---
 
-## 系统目标
+## Section 1 目标
+为了提高热点挖掘效率，提前触发内容生产，本方案将目标重构为以下两个分目标：
 
-把"被动跟随竞品标题"升级为**多源信号驱动 + 量化热点建模 + 多 Agent 协同 + 持续反馈迭代**的闭环系统。
-
-**核心转变**：
-
-| 维度 | 旧模式 | 新模式 |
-|------|--------|--------|
-| 信息源 | 单一竞品标题 | 7+ 源信号（涨停/异动/资金流/公告/快讯/研报/财务） |
-| 触发 | 标题到达 | 异动检测 + 跨源共振（板块/资金/异动多维） |
-| 价值判断 | 经验性 | 7 维特征向量 + 量化评分 |
-| 上下文 | 每次独立 | 三层记忆（WM/EM/SM） |
-| 编排 | 状态机串行 | Orchestrator ReAct 自主决策 |
-| 内容生产 | 单篇 | Top-N 并行（默认 5 candidates × 3 workers） |
-| 子 Agent 协作 | 显式串联 | ReAct + Plan-and-Execute，子 Agent 不直接通信 |
-| 闭环 | 单次 review | review → writer 修复 → review（直到 passed） |
+1. 把热点内容生产的触发信号由"被动跟随竞品标题"升级为**多源信号实时驱动 + 量化热点建模**；
+2. **多 Agent 协同 + 持续反馈迭代**构建内容生产闭环，提升生成质量。
 
 ---
 
-## 核心设计
+## Section 2 方案设计
+根据目标，本方案的核心设计根据目的主要可以分为两部分：
+1. 潜在热点自动挖掘
+2. Agent化内容生产
 
-### 1. 热点建模：7 维特征向量
+传统热点发掘依赖于人工识别数据和参考竞品网站文章发布情况，在热点发掘的速度和时效性上存在劣势。本方案中，我们将热点识别的的触发条件从竞品网站文章标题前移至金融市场的实时数据，通过机器学习算法自动化市场异常动向识别，在提高热点发掘速度的同时解决了内容生产触发点滞后的问题。
 
-$$\mathbf{H} = (I, P, V, N, R, D, L)$$
+具体来说，本方案利用股票市场数据接口扫描实时金融数据并进行异常动向分析。被算法捕捉到的异动将计算确信度分数并进行排序，确信度最高的几项市场异动将被包装为话题，触发基于多Agent协作的内容生产环节。指挥Agent（Orchestrator）在接收到主题后，将会指挥不同职责的子Agent完成对应的调研、写作及审阅等任务：
+
+- 调研Agent（Researcher）：自主判断并利用一系列工具收集异动相关信息，如行业背景、个股数据、政策法规等，整合成简报备用；
+- 写作Agent（Writer）：接收指挥的prompt以及利用对应的简报，生成相应的文章待审；
+- 审阅Agent（Reviewer）：利用相关工具审核生成文章的质量，提供审阅意见给指挥；
+
+在完成调研-写作-审阅的流程后，指挥会根据审阅意见，自主判断是否需要再次调研获取更多数据，或是直接利用现有数据重写文章再次审阅。三个子Agent分工明确，互相之间无直接交流，由指挥统一协调从而避免了混乱的工作流程。
+
+本方案提出的热点挖掘及内容生产流程如下图所示，后续章节将对每个组件做更具体的介绍。
+```mermaid
+flowchart TB
+    A[Scanner 扫描数据] --> B[AnomalyDetector<br/>异动捕捉 + 去重]
+    B --> C[HotspotDetector<br/>异动事件评分]
+    C --> D[TopicModeller<br/>异动主题提取及筛选]
+    D --> E[Orchestrator Agent<br/>不同主题内容生产并行]
+    E --> F1[Worker 1: Research/Writer/Review 闭环]
+    E --> F2[Worker 2: Research/Writer/Review 闭环]
+    E --> F3[Worker 3: Research/Writer/Review 闭环]
+    F1 --> G[published articles<br/>热点文章发布]
+    F2 --> G
+    F3 --> G
+```
+
+***由于数据来源及计算资源有限，本方案下用于挖掘潜在热点的算法以及用于内容生产的Agent（包括对应的Tool，Skill以及Memory等模块）仅起到示例作用。实际工业生产中，可以使用更准确的算法替换以下提到的特征提取/异动捕捉等算法，以及用能力更强的LLM/Agent替换本方案中使用的LLM和Agent，从而达到更优的表现。***
+
+### Section 2.1 热点挖掘与异动检测
+本方案认为，由于热点挖掘与异动检测实时性的要求，系统应以较高频率获取市场数据进行分析。因此本方案假定有一个常驻线上的数据收集进程，每隔时间$T$，本系统将会分析本段时间内的市场数据并与历史进行对比，从而捕捉市场的异常动态。
+
+出于验证最小可行系统的考量，本方案将此思路简化为对热点情况的7个不同维度打分后进行线性加权，以下是该部分的简单介绍。
+
+
+#### Section 2.1.1 热点建模：6 维特征向量
+
+$$\mathbf{H} = (I, P, V, N, R, D)$$
+
+<div align="center">
 
 | 维度 | 含义 | 数据源 |
 |------|------|--------|
@@ -60,38 +87,33 @@ $$\mathbf{H} = (I, P, V, N, R, D, L)$$
 | $N$ Novelty | 新颖度 | 历史案例相似度 |
 | $R$ Relevance | 主体关联性 | 行业知识图谱 |
 | $D$ Value Density | 价值密度 | 信息含量 |
-| $L$ Lead Time | 提前量 | 与竞品时差 |
 
-**综合评分**：
+</div>
 
-$$\text{Score}(H) = w^T \mathbf{H}, \quad w = (0.20, 0.10, 0.10, 0.15, 0.15, 0.20, 0.10)$$
+每个维度的分数都在$[0,1]$，最终的**异动确信度分数**为：
 
-### 2. 异动检测：4 类跨源共振
+$$\text{Score}(H) = w^T \mathbf{H}, \quad w = (0.22, 0.11, 0.11, 0.17, 0.17, 0.22)$$
+
+$w$是每个维度的权重，在实际生产中可以学习或根据经验手动调整。出于简单性考虑，本方案中我们将权重设置为常数。
+
+> **详细公式与代码映射** 见 [`docs/hotspot_modeling.md`](docs/hotspot_modeling.md)（6 维公式 + 实际算例 + 确信度划分）
+
+
+
+#### 2.1.2 4类异动检测
+
+由于金融背景及数据有限，本方案在AI辅助下设计了以下4类异动信号进行检测：
 
 - `board_resonance` —— 同板块多只个股涨停（去重后 ≥ 3 只不同个股）
 - `board_change_with_fundflow` —— 板块异动 + 主力净流入
 - `change_with_limitup` —— 板块异动频繁（≥ 5 次）+ 多只涨停（≥ 2 只）
 - `risk_concentration` —— 同板块多只跌停（风险信号）
 
-### 3. Orchestrator ReAct 模式
+### 2.2 Agent化热点内容生产
 
-**不**用状态机硬编码调度，改成 LLM 自主决策：
+#### 2.2.1 Orchestrator ReAct 模式
 
-```mermaid
-flowchart TB
-    A[Scanner 3 天扫描] --> B[AnomalyDetector<br/>4 类异动 + 去重]
-    B --> C[HotspotDetector<br/>7 维评分]
-    C --> D[TopicModeler<br/>包成 topics]
-    D --> E[Orchestrator ReAct<br/>Top-N 并行]
-    E --> F1[Worker 1: R/W/R 闭环]
-    E --> F2[Worker 2: R/W/R 闭环]
-    E --> F3[Worker 3: R/W/R 闭环]
-    F1 --> G[published articles]
-    F2 --> G
-    F3 --> G
-```
-
-每个 worker 内部 ReAct 流程：
+每个 Orchestrator worker 内部按照 ReAct 流程思考并调用对应的子Agent：
 
 ```mermaid
 sequenceDiagram
@@ -289,13 +311,12 @@ pip install -r requirements.txt
 
 ### 2. 配置 API Key
 
-DeepSeek API Key 走环境变量：
+DeepSeek API Key 配置在环境变量中：
 
 ```bash
 export DEEPSEEK_API_KEY="sk-..."
 ```
 
-或在 `config.py` 里直接写（不推荐，**别 commit**）。
 
 ### 3. 运行
 
@@ -313,7 +334,7 @@ python main.py --mode human --no-proxy
 python main.py --no-eval --no-proxy
 ```
 
-> **一定要加 `--no-proxy`**，因为本地 clash 代理对 `push2.eastmoney.com` 的兼容有问题，会卡住。
+> `--no-proxy`可以解决本地代理对 `push2.eastmoney.com` 的兼容问题。
 
 ### 4. 调参
 
@@ -373,9 +394,9 @@ HOTSPOT_HIGH_CONF = 0.75   # 高确信度
 HOTSPOT_MID_CONF = 0.55    # 中等(默认 Orchestrator 跑这个)
 HOTSPOT_LOW_CONF = 0.35    # 低(只观察)
 WEIGHTS = {                # 7 维权重
-    "intensity": 0.20, "persistence": 0.10, "virality": 0.10,
-    "novelty": 0.15, "relevance": 0.15, "value_density": 0.20,
-    "lead_time": 0.10,
+    "intensity": 0.22, "persistence": 0.11, "virality": 0.11,
+    "novelty": 0.17, "relevance": 0.17, "value_density": 0.22,
+    # lead_time 已移除(2026-08-06,见 Section 2.1.1)
 }
 ```
 
