@@ -1,29 +1,38 @@
 # 财经热点发现与内容生产 Multi-Agent 系统
 
-> 当前的财经热点内容写作往往依赖于竞品网站已发布的内容，这也导致热点文章的创作和发布在时间上存在滞后性，内容上存在跟随性等问题。
-> 本方案提出一个财经热点发现与内容生产 Multi-Agent 系统，通过机器学习算法自动识别市场异动。
-> 本方案将内容创作的触发点前移至金融市场信号，从而解决了热点发现的滞后性问题。
+> TL;DR: 当前的财经热点内容写作往往依赖于竞品网站已发布的内容，这也导致热点文章的创作和发布在时间上存在滞后性，内容上存在跟随性等问题。
+> 本方案提出一个财经热点发现与内容生产 Multi-Agent 系统，利用算法自动识别市场异动。
+> 通过将内容创作的触发点前移至金融市场信号，本方案致力于解决财经热点发现的滞后性问题。
 > 另一方面，本方案把内容生产环节Agent化，用一个Orchestrator Agent总体调控内容生产步骤，指挥三个独立的Agent分别独立完成调研、写作、审阅等任务。
-> 不同层级的Agent采用不同的设计范式，通过互相协作完成数据调研-文本写作-审阅修改的闭环，从而提高生成的热点内容的质量。
+> 本方案中不同层级的Agent采用不同的设计范式，通过互相协作完成数据调研-文本写作-审阅修改的闭环，从而提高生成的热点内容的质量。
 ---
 
 ## 目录
 
-- [系统目标](#系统目标)
-- [核心设计](#核心设计)
-- [系统架构](#系统架构)
+- [Section 1 目标](#section-1-目标)
+- [Section 2 方案设计](#section-2-方案设计)
+  - [Section 2.1 热点挖掘与异动检测](#section-21-热点挖掘与异动检测)
+    - [Section 2.1.1 热点建模：6 维特征向量](#section-211-热点建模6-维特征向量)
+    - [2.1.2 4类异动检测](#212-4类异动检测)
+  - [Section 2.2 Agent化热点内容生产](#section-22-agent化热点内容生产)
+    - [Section 2.2.1 指挥Agent（Orchestrator）](#section-221-指挥agentorchestrator)
+    - [Section 2.2.2 子 Agent（Researcher/Writer/Reviewer）](#section-222-子-agentresearcherwriterreviewer)
+  - [Section 2.3 记忆管理](#section-23-记忆管理)
+  - [Section 2.4 Harness和Loop Engineering](#section-24-harness和loop-engineering)
+- [Section 3 工程设计](#section-3-工程设计)
+- [Section 4 评估体系](#section-4-评估体系)
+  - [Section 4.1 评估指标（三层）](#section-41-评估指标三层)
+  - [Section 4.2 内容质量评估方法](#section-42-内容质量评估方法)
+  - [Section 4.3 实际跑批示例（2026-08-06）](#section-43-实际跑批示例2026-08-06)
+- [Section 5 后续优化方向](#section-5-后续优化方向)
 - [项目结构](#项目结构)
 - [安装与运行](#安装与运行)
 - [运行模式](#运行模式)
-- [关键参数调优](#关键参数调优)
+- [关键参数](docs/关键参数.md)
 - [输出产物](#输出产物)
+- [Examples](examples/README.md)
 - [工具与子 Agent](#工具与子-agent)
-- [ReAct 闭环详解](#react-闭环详解)
-- [Reviewer 四重门禁](#reviewer-四重门禁)
-- [评估体系](#评估体系)
-- [调试与排查](#调试与排查)
-- [已知限制](#已知限制)
-- [License](#license)
+- [声明](#声明)
 
 ---
 
@@ -56,10 +65,10 @@ flowchart TB
     A[Scanner 扫描数据] --> B[AnomalyDetector<br/>异动捕捉 + 去重]
     B --> C[HotspotDetector<br/>异动事件评分]
     C --> D[TopicModeller<br/>异动主题提取及筛选]
-    D --> E[Orchestrator Agent<br/>不同主题内容生产并行]
-    E --> F1[Worker 1: Research/Writer/Review 闭环]
-    E --> F2[Worker 2: Research/Writer/Review 闭环]
-    E --> F3[Worker 3: Research/Writer/Review 闭环]
+    D --> E[Orchestrator Agent<br/>调度各主题内容生产并行]
+    E --> F1[主题 1<br/>Research → Write → Review]
+    E --> F2[主题 2<br/>Research → Write → Review]
+    E --> F3[主题 3<br/>Research → Write → Review]
     F1 --> G[published articles<br/>热点文章发布]
     F2 --> G
     F3 --> G
@@ -70,7 +79,7 @@ flowchart TB
 ### Section 2.1 热点挖掘与异动检测
 本方案认为，由于热点挖掘与异动检测实时性的要求，系统应以较高频率获取市场数据进行分析。因此本方案假定有一个常驻线上的数据收集进程，每隔时间$T$，本系统将会分析本段时间内的市场数据并与历史进行对比，从而捕捉市场的异常动态。
 
-出于验证最小可行系统的考量，本方案将此思路简化为对热点情况的7个不同维度打分后进行线性加权，以下是该部分的简单介绍。
+出于验证最小可行系统的考量，本方案将此思路简化为对热点情况的6个不同维度打分后进行线性加权，以下是该部分的简单介绍。
 
 
 #### Section 2.1.1 热点建模：6 维特征向量
@@ -106,136 +115,118 @@ $w$是每个维度的权重，在实际生产中可以学习或根据经验手�
 - `change_with_limitup` —— 板块异动频繁（≥ 5 次）+ 多只涨停（≥ 2 只）
 - `risk_concentration` —— 同板块多只跌停（风险信号）
 
-### 2.2 Agent化热点内容生产
+### Section 2.2 Agent化热点内容生产
+本方案重点聚焦于用多Agent协作的方式，自动化热点新闻的内容生产。参考人类撰写研究报告的方式，本方案用一个指挥Agent协调三个子Agent进行分工合作。指挥Agent与具体完成工作的Agent根据任务类型的不同，应用了不同的设计范式。以下章节将对每个Agent做具体介绍。
 
-#### 2.2.1 Orchestrator ReAct 模式
+#### Section 2.2.1 指挥Agent（Orchestrator）
 
-每个 Orchestrator worker 内部按照 ReAct 流程思考并调用对应的子Agent：
+![Orchestrator 主工作流程](assets/orchestrator_main_flow.svg)
 
-```mermaid
-sequenceDiagram
-    participant O as Orchestrator
-    participant R as Researcher
-    participant W as Writer
-    participant V as Reviewer
+指挥Agent采用ReAct + Self-Reflection范式，具体来说：
+- ReAct：每一轮循环中，指挥Agent将会自主决定应该调用哪些子Agent进行调研/写作/修改，并给出对应的prompt，直到其认为满足发布要求；
+- Self-Reflection：从第二轮循环开始时，指挥Agent将会根据"上轮命令 + 上轮审阅结果"，自主推断原因放到自己的prompt 里，让指挥自己观察、决定下一步。
 
-    O->>R: call_researcher(topic_subject, focus_areas)
-    R-->>O: research_brief (含 plan/tool_data/key_facts)
-    O->>W: call_writer(brief, style_hint, length_target)
-    W-->>O: article (title/content/word_count)
-    O->>V: call_reviewer(article)
-    V-->>O: review (passed/score/issues)
+此设计的优势在于：
+1. 相比于使用固定的调研-写作-审阅管线，让指挥Agent根据情况自主决定下一轮需要调用哪些Agent进行组合并完成文章修改，提供流程上的灵活性；
+2. 子Agent作为Tool注册开放给指挥Agent调用，形式上支持接入更多的Agent分工合作完成其他额外任务（如作图等），为未来的工作流的拓展保留了更新的余地；
+3. 部分情况下，子Agent可能无法完成任务（如因网络波动无法获取数据、子Agent进程意外被终止等），指挥Agent可以为异常情况兜底，自主决定是否应该重新调用失败的Agent或修改该Agent的prompt；
+4. 针对具体的内容生成场景，指挥Agent可能可以在用户指导下探索出该场景下更高效的工作流程并总结为Skill以备下次复用。
 
-    alt passed=false
-        O->>O: 解析 issues
-        alt [LENGTH] 字数问题
-            O->>W: call_writer(brief, length_target=Y)
-        else [FACTS] 关键事实未体现
-            O->>W: call_writer(brief, style_hint="必须把 X/Y/Z 写进文章")
-        else 其他 issues
-            O->>W: call_writer(brief, style_hint)
-        end
-        W-->>O: revised article
-        O->>V: call_reviewer(revised_article)
-        V-->>O: review (再次判定)
-    end
-```
+#### Section 2.2.2 子 Agent（Researcher/Writer/Reviewer）
 
-### 4. 子 Agent Plan-and-Execute
+![子 Agent 设计理念](assets/sub_agents_design.svg)
 
-每个子 Agent（Researcher / Writer / Reviewer）有**显式 plan 阶段**：
+每个子 Agent（Researcher / Writer / Reviewer）的任务目标较为明确，因此本方案要求每个子Agent按照**Plan-and-Execute**范式进行工作。也即，每个子Agent会先显式地规划自己的任务再执行：
 
-- **Researcher**：LLM 生成 5 步研究 plan → 按 plan 顺序执行 → 同 tool 连续调用拆成 batch 并行
-- **Writer**：先 LLM 写写作策略（angle/data_points/must_include/tone）→ 单次 LLM 出全文
-- **Reviewer**：LLM 生成 8-10 项 checklist → 按 checklist 逐项审 → 字数 / 关键事实 / LLM / 数据完整性 四重门禁
+- **Researcher**：根据指挥传入的异动主题，生成研究计划，决定需要获取哪些数据以及调用哪些Tool → 按 plan 顺序执行获取数据，生成简报备用
+- **Writer**：根据指挥传入的简报，生成写作策略（angle/data_points/must_include/tone）→ 根据写作策略生成全文
+- **Reviewer**：根据checklist决定需要调用哪些Tool进行审阅 → 逐项审阅文章 → 总结审阅意见
 
-子 Agent 之间**不直接通信**，完全由 Orchestrator 决定调用顺序、传什么 prompt。
+子 Agent 之间**不直接通信**，完全由 Orchestrator 决定调用顺序、传什么 prompt，避免多Agent之间循环调用无法结束流程。
 
-### 5. Reviewer 四重门禁
+### Section 2.3 记忆管理
 
-每篇文章必须同时通过：
+记忆管理是实现跨对话历史的信息传递方式，有效的记忆管理系统能够帮助Agent高效地完成任务，复用成功经验，避免重复犯相同的错误。
+本方案按职责把记忆拆成三层。不同 Agent 按照各自需求调用，保证信息流通的同时避免历史案例污染子 Agent 的判断：
 
-1. **规则层**：禁用词、字数、风险提示、标题合规
-2. **LLM 层**（Plan-and-Execute）：按 checklist 逐项审核，给分 + issues
-3. **关键事实覆盖**：从 `brief.key_facts` 抽关键词 + LLM 兜底，验证 article 体现了所有关键事实
+- **Working Memory (WM)** — 存当前事件上下文，默认注入所有 Agent；
+- **Episodic Memory (EM)** — 存历史案例，**Orchestrator**可以调用来参考历史调度策略；
+- **Semantic Memory (SM)** — 存行业知识 + 读者画像，全员共享，作为研究 / 写作 / 审阅的公共词典
 
-任意一条不通过 → `passed=False` → Orchestrator 外层循环触发 call_writer 修复 → 再 call_reviewer 验证 → 最多 `ORCHESTRATOR_MAX_OUTER_ROUNDS` 轮（默认 3）。
+每个Agent只看到自己该关心的部分。子 Agent (Researcher / Writer / Reviewer) 不接触历史案例，避免被旧案例带偏，Orchestrator 用 EM 决定调度策略。
+
+### Section 2.4 Harness和Loop Engineering
+
+本方案设计中，**Harness**主要体现在如下要素:
+
+- **上下文构建器 (Context Builder)** — `tools/llm_client.py` 的 `chat_with_tools()` 每次手动组装 system prompt + user prompt + 历史消息，Writer / Reviewer 在 plan 阶段先生成上下文再执行；
+- **工具注册表与边界 (Tool Registry & Boundaries)** — `tools/agent_tools.py` 统一注册工具，每个Agent只能调对应白名单内的工具；
+- **持久化记忆与状态 (Persistent Memory & State)** — 三层 Memory (WM / EM / SM) + brief JSON 缓存，跨会话保留项目知识与任务进度；
+- **护栏与策略 (Guardrails & Policies)** — Reviewer根据checklist审阅文章生成内容 + 指挥Agent设定循环上限 + 发布失败文章本地缓存兜底；
+- **反馈与验证循环 (Feedback Loops)** — ReAct 自主循环 + Self-Reflection 让 LLM 自主推断循环未结束原因；
+- **可观测性与日志 (Tracing & Audit Logs)** — 保留完整运行日志记录 CoT / tool call / result，让Agent的决策路径可复线，简化调试过程。
+
+另一方面，**Loop Engineering（循环工程）** 主要体现在以下要素:
+
+- **自动化 (Automations)** — 扫描完数据后，自主发现内容生产过程中的问题并启动循环，无需人工频繁介入；
+- **工作树 (Worktrees)** — 并行任务中间产物按时间戳 + 主题进行规范命名，线程上下文隔离避免文件冲突；
+- **技能 (Skills)** — Writer 的"写作策略"(angle / data_points / must_include / tone) 是可复用技能，规范文章生成内容和风格；
+- **插件与连接器 (Plugins & Connecters)** — 利用数据工具连接真实金融市场环境，补充必需的产品/行业/板块背景，为内容生产提供真实知识；
+- **子代理 (Sub-agents)** — Researcher / Writer / Reviewer 三个子 Agent 职责分离，由独立模型对产出进行校验。
+
+## Section 3 工程设计
+
+虽然本方案目标是验证一个自动热点挖掘及内容生成系统的可行性，我们依然在Coding Agent的辅助下进行了一些工程上的设计以提高系统效率：
+
+1. **并行处理多个异动**：每个异动单独唤起一个线程进行内容生产，避免热点之间串行等待。本地测试中， 5 个候选从串行 ~500s 压到并行 ~350s。
+
+2. **浅封装，无 LangChain/LangGraph**：直接用 DeepSeek SDK 调 LLM，用Coding Agent辅助实现 ReAct 的 chat_with_tools 循环。CoT / messages / tool call 全部可在log日志中观测和调试，简化调试过程。
+
+3. **Researcher 工具并行**：多个获取数据的 Tool 的调用拆成 batch，用 ThreadPoolExecutor 并发跑；不同 Tool 之间也互不干扰，进一步压短数据获取时间。
 
 ---
 
-## 系统架构
+## Section 4 评估体系
 
-```mermaid
-flowchart TB
-    subgraph 数据源
-        AK[akshare 接口]
-    end
+### Section 4.1 评估指标（三层）
+由于缺少具体可以对比的竞品及数据集，本方案仅提出部分可用于评估系统表现的指标，实际生产环境中应当根据实际要求调整评估方案：
 
-    subgraph 工具层
-        AT[AkShareTools<br/>缓存/重试/标准化]
-        TT[ToolRegistry<br/>14 个工具统一注册]
-    end
+1. **热点发现质量**：信号数、候选数、平均评分、确信度分布
+2. **内容质量**：草稿数、审核通过数、审核通过率、平均审核分、用户满意度
+3. **业务指标**：发布数、发布率、字数合规率、关键事实覆盖数、发布领先竞品时间
 
-    subgraph Agent 层
-        SC[Scanner<br/>3 天扫描]
-        AD[AnomalyDetector<br/>4 类异动]
-        HD[HotspotDetector<br/>7 维评分]
-        TM[TopicModeler]
-        OR[Orchestrator<br/>ReAct + Top-N 并行]
-        RS[Researcher<br/>Plan-and-Execute]
-        WR[Writer<br/>Plan-and-Execute]
-        RV[Reviewer<br/>Plan-and-Execute]
-    end
+### Section 4.2 内容质量评估方法
 
-    subgraph 记忆层
-        WM[Working Memory<br/>当前事件]
-        EM[Episodic Memory<br/>历史案例]
-        SM[Semantic Memory<br/>行业知识 + 读者画像]
-    end
+- **自动评估**：每次跑完生成 `output/reports/eval_YYYYMMDD_HHMMSS.md`
+- **健康度等级**：🟢 健康（通过率 ≥ 80%）/ 🟡 一般 / 🔴 异常
+- **失败追踪**：未通过的文章记到 failed_articles，用于复盘
 
-    subgraph LLM 层
-        DS[DeepSeek API]
-        LC[LLM Client<br/>CoT + 工具调用日志]
-    end
+### Section 4.3 实际跑批示例（2026-08-06）
 
-    subgraph 输出
-        AR[articles/*.md]
-        BR[briefs/*.json]
-        AN[anomalies/*.json]
-        CD[candidates/*.json]
-        RT[react_traces/*.json]
-        LG[logs/*.log]
-        RP[reports/eval_*.md]
-    end
+最近一轮跑批（[round_20260806_181528](examples/round_20260806_181528/)）的真实数据：
 
-    AK --> AT --> TT
-    SC --> AT
-    AD --> AT
-    HD --> AT
-    TM --> SM
-    OR --> RS
-    OR --> WR
-    OR --> RV
-    RS --> DS
-    WR --> DS
-    RV --> DS
-    OR --> DS
-    DS --> LC
-    RS --> AT
-    WR --> SM
-    RV --> SM
-    OR --> SM
-    SC --> WM
-    AD --> WM
-    HD --> WM
-    AD --> AN
-    HD --> CD
-    RS --> BR
-    OR --> AR
-    OR --> RT
-    OR --> LG
-    AR --> RP
-```
+| 指标 | 数值 |
+|------|------|
+| 信号 / 异动 / 候选 | 342 / 15 / 15 |
+| 高 / 中 / 低确信度候选 | 1 / 14 / 0 |
+| 草稿 / 审核通过 / 发布 | 7 / 5 / 5 |
+| 平均字数 / 平均审核分 | 1828 字 / 98.6 |
+| 整体健康度 | 🟢 健康（5 / 5 发布成功） |
+
+5 个发布主题：消费电子、半导体、通信设备、计算机设、元件（按 6 维评分排序）。
+
+---
+
+## Section 5 后续优化方向
+
+- [ ] 加入更多用于获取真实市场数据的工具
+- [ ] 接入社交媒体（雪球/微博/小红书等），收集投资者情绪和舆情
+- [ ] 升级异动捕捉和热点检测算法
+- [ ] 增加可视化人工审核界面
+- [ ] A/B 测试框架（不同 prompt / 不同模型对比）
+- [ ] 流式输出（每篇文章生成完通过审核立即推送，不等全部跑完）
+- [ ] 更多稳健的错误兜底机制，防止Agent调用工具失败时陷入死循环
+- [ ] 更严格的审阅机制，目前审阅机制过于简单，文章审阅分数往往偏高
 
 ---
 
@@ -243,52 +234,68 @@ flowchart TB
 
 ```
 finance_hotspot_agent/
-├── main.py                      # 入口 (full/scan/report/human)
-├── config.py                    # 全局配置(路径/阈值/权重/LLM)
+├── main.py                      # 入口
+├── config.py                    # 全局配置
 ├── requirements.txt             # 依赖
+├── README.md
+├── .gitignore
 │
 ├── agents/                      # 8 个核心 Agent
-│   ├── base.py                  # BaseAgent + AgentResult
-│   ├── scanner.py               # Scanner:3 天多源信号扫描
-│   ├── anomaly_detector.py      # 异动检测(4 类规则 + 去重)
-│   ├── hotspot_detector.py      # 热点识别(7 维特征 + 评分)
-│   ├── topic_modeler.py         # 话题建模(1:1 包装)
-│   ├── researcher.py            # Plan-and-Execute + 预取真实代码
-│   ├── writer.py                # Plan-and-Execute(策略 + 单次出稿)
-│   ├── reviewer.py              # Plan-and-Execute + 关键事实覆盖检查
-│   └── orchestrator.py          # ReAct 编排 + Top-N 并行 + 外层闭环
+│   ├── base.py                  # BaseAgent 基类
+│   ├── scanner.py               # 3 天信号扫描
+│   ├── anomaly_detector.py      # 异动检测
+│   ├── hotspot_detector.py      # 6 维热点识别
+│   ├── topic_modeler.py         # 话题建模
+│   ├── researcher.py            # 研究 Agent
+│   ├── writer.py                # 写作 Agent
+│   ├── reviewer.py              # 审阅 Agent
+│   └── orchestrator.py          # 指挥 Agent
 │
 ├── tools/                       # 工具层
-│   ├── akshare_tools.py         # akshare 封装(缓存/重试/标准化)
-│   ├── agent_tools.py           # ToolRegistry 统一注册
-│   ├── agent_subagent_tools.py  # 3 个子 Agent 工具(call_researcher/writer/reviewer)
-│   ├── dummy_tools.py           # 3 个 [DUMMY] 占位 + check_article_length
-│   ├── llm_client.py            # DeepSeek 客户端 + CoT/tool 调用日志
-│   ├── persist.py               # save_anomalies/candidates/briefs
-│   ├── disable_proxy.py         # --no-proxy 实现
-│   └── data_explorer.py         # akshare 接口探索工具
+│   ├── akshare_tools.py         # akshare 封装
+│   ├── agent_tools.py           # 工具注册
+│   ├── agent_subagent_tools.py  # 子 Agent 工具
+│   ├── dummy_tools.py           # Dummy 工具
+│   ├── llm_client.py            # LLM 客户端
+│   ├── persist.py               # 持久化
+│   ├── disable_proxy.py         # 代理禁用
+│   └── data_explorer.py         # 数据探索
 │
 ├── memory/                      # 三层记忆
-│   ├── working_memory.py        # WM:当前事件上下文
-│   ├── episodic_memory.py       # EM:历史热点 + 反馈
-│   └── semantic_memory.py       # SM:行业知识 + 读者画像
+│   ├── working_memory.py        # 当前事件上下文
+│   ├── episodic_memory.py       # 历史案例
+│   └── semantic_memory.py       # 行业知识
 │
 ├── evaluation/
-│   └── evaluator.py             # 评估 + 报告生成
+│   └── evaluator.py             # 评估报告
+│
+├── assets/                      # 图片资源
+│   ├── orchestrator_main_flow.svg   # 主工作流程图
+│   └── sub_agents_design.svg        # 子 Agent 设计图
+│
+├── docs/                        # 文档
+│   ├── hotspot_modeling.md      # 6 维建模公式
+│   └── 关键参数.md               # 关键参数
 │
 ├── tests/
-│   ├── test_basic.py            # 基础单元测试
-│   └── test_*.py                # 组件测试
+│   ├── test_basic.py            # 基础测试
+│   ├── test_llm.py              # LLM 测试
+│   ├── test_researcher_tools.py # Researcher 测试
+│   └── test_tools.py            # 通用测试
+│
+├── examples/                    # 示例跑批快照
+│   ├── README.md                # 总览
+│   └── round_<时间戳>/          # 单轮产物
 │
 └── output/                      # 运行时产物
-    ├── articles/                # 生成的 Markdown 文章
-    ├── briefs/                  # 研究简报(含 plan/tool_data/key_facts)
+    ├── articles/                # 文章
+    ├── briefs/                  # 研究简报
     ├── anomalies/               # 异动检测结果
     ├── candidates/              # 热点候选
-    ├── react_traces/            # ReAct 决策轨迹
+    ├── react_traces/            # ReAct 轨迹
     ├── reports/                 # 评估报告
     ├── logs/                    # 运行日志
-    └── cache/                   # akshare 接口文件缓存
+    └── cache/                   # akshare 缓存
 ```
 
 ---
@@ -314,26 +321,7 @@ DeepSeek API Key 配置在环境变量中：
 export DEEPSEEK_API_KEY="sk-..."
 ```
 
-
-### 3. 运行
-
-```bash
-# 完整流程(默认)
-python main.py --no-proxy
-
-# 只跑 Scanner + Anomaly + Hotspot(轻量,不写文章)
-python main.py --mode scan --no-proxy
-
-# 跑带人工审核的流程
-python main.py --mode human --no-proxy
-
-# 不生成评估报告
-python main.py --no-eval --no-proxy
-```
-
-> `--no-proxy`可以解决本地代理对 `push2.eastmoney.com` 的兼容问题。
-
-### 4. 调参
+### 3. 调参
 
 通过环境变量覆盖 `config.py` 里的参数：
 
@@ -344,7 +332,7 @@ ORCHESTRATOR_MAX_OUTER_ROUNDS=2 \
   python main.py --no-proxy
 ```
 
-完整参数见 [关键参数调优](#关键参数调优)。
+完整参数见 [docs/关键参数.md](docs/关键参数.md)。
 
 ---
 
@@ -357,82 +345,14 @@ ORCHESTRATOR_MAX_OUTER_ROUNDS=2 \
 | `human` | `python main.py --mode human --no-proxy` | 中确信度候选需要人工确认再继续 |
 | `report` | `python main.py --mode report --no-proxy` | 不重跑，只对当前 WM 生成报告 |
 
----
-
-## 关键参数调优
-
-`config.py` 里所有可调参数：
-
-### 路径
-```python
-OUTPUT_DIR = BASE_DIR / "output"
-ARTICLES_DIR = OUTPUT_DIR / "articles"
-ANOMALIES_DIR = OUTPUT_DIR / "anomalies"
-CANDIDATES_DIR = OUTPUT_DIR / "candidates"
-BRIEFS_DIR = OUTPUT_DIR / "briefs"
-```
-
-### Scanner
-```python
-SCANNER_SCAN_DAYS = 3                 # 扫最近 N 个工作日
-```
-
-### 异动检测
-```python
-ANOMALY_ZSCORE_THRESHOLD = 2.5
-ANOMALY_VOLUME_RATIO_THRESHOLD = 2.0
-ANOMALY_PRICE_CHANGE_THRESHOLD = 0.05
-```
-
-### 热点评分
-```python
-HOTSPOT_MIN_SCORE = 0.55   # 进入研究环节的最低分
-HOTSPOT_HIGH_CONF = 0.75   # 高确信度
-HOTSPOT_MID_CONF = 0.55    # 中等(默认 Orchestrator 跑这个)
-HOTSPOT_LOW_CONF = 0.35    # 低(只观察)
-WEIGHTS = {                # 7 维权重
-    "intensity": 0.22, "persistence": 0.11, "virality": 0.11,
-    "novelty": 0.17, "relevance": 0.17, "value_density": 0.22,
-    # lead_time 已移除(2026-08-06,见 Section 2.1.1)
-}
-```
-
-### LLM
-```python
-LLM_PROVIDER = "deepseek"
-LLM_MODEL = "deepseek-v4-flash"        # 闪速版
-LLM_MAX_TOKENS = 32768                 # 主调
-LLM_WRITER_MAX_TOKENS = 32768          # Writer 用
-LLM_REVIEWER_MAX_TOKENS = 8192         # Reviewer 用
-LLM_LONG_COT_MAX_TOKENS = 49152        # Orchestrator ReAct 长 CoT
-LLM_MAX_TOOL_ROUNDS = 10               # ReAct 单轮最大工具调用
-LLM_REFINEMENT_MIN_SCORE = 85          # 审核通过最低分
-LLM_REASONING_LOG_ENABLED = True       # CoT 日志开关
-LLM_TOOL_CALL_LOG_ENABLED = True       # 工具调用日志开关
-```
-
-### Orchestrator
-```python
-ORCHESTRATOR_MAX_ROUNDS = 6            # ReAct 单轮最大工具调用
-ORCHESTRATOR_MAX_OUTER_ROUNDS = 3      # 外层闭环(修复循环)最大轮数
-ORCHESTRATOR_TOP_N = 5                 # 并行处理的 candidate 数
-ORCHESTRATOR_MAX_WORKERS = 3           # 并行线程数
-```
-
-### Akshare
-```python
-DISABLED_TOOLS = {                     # 暂时禁用的工具(网络不通的)
-    "get_individual_fund_flow", "get_sector_fund_flow",
-    "get_zh_a_spot", "get_individual_info",
-    "get_research_report", "get_changes_realtime", "get_gsdt",
-}
-```
 
 ---
 
 ## 输出产物
 
-跑完一次 `full` 模式，产出在 `output/` 下：
+最近一轮跑批的真实产物快照见 [`examples/round_20260806_181528/`](examples/round_20260806_181528/),文章在 [articles/](examples/round_20260806_181528/articles/) 目录下(5 篇示例文章 + 完整中间产物)。
+
+跑完一次 `full` 模式,产出在 `output/` 下:
 
 ```
 output/
@@ -454,27 +374,9 @@ output/
 └── cache/                                  # akshare 文件缓存
 ```
 
-### 文章格式
-
-```markdown
-# 电网设备板块多股联动走强，机构关注景气度回升
-
-> 文章ID: art_xxx
-> 主题: 电网设备
-> 字数: 1670
-> 生成时间: 2026-08-04T00:49:42
-> 审核: 审核通过(分数 100/100)
-> 审核分数: 100/100
-> 研究简报: output/briefs/20260804_004914_电网设备_brief_1785775754_1666.json
-
 ---
 
-[正文 1500 字左右，专业严谨风格，含合规披露 + 风险提示]
-```
-
----
-
-## 工具与子 Agent
+## 工具
 
 ### Researcher 工具（6 个，plan prompt 白名单）
 
@@ -487,7 +389,6 @@ output/
 | `get_yjyg` | 业绩预告 | `{"date": "20250331"}` |
 | `get_financial_report` | 三大报表 | `{"symbol": "6位股票代码", "report_type": "..."}` |
 
-> Researcher 内部有 `_prefetch_real_symbols()`，先跑 `get_limit_up_pool` 拿真实股票代码塞到 plan prompt 里，**避免 LLM 编造股票代码**（之前坑过 002931 幻觉）。
 
 ### Orchestrator 工具（3 个子 Agent）
 
@@ -497,7 +398,6 @@ output/
 | `call_writer` | 调 Writer 写文章 | `research_brief_json, style_hint, length_target` |
 | `call_reviewer` | 调 Reviewer 审核 | `article_json, focus_areas` |
 
-> ⚠️ **字数问题必须用 `length_target`，不能用 `style_hint` 改字数**（这是 Orchestrator 强约束）。
 
 ### Dummy 工具（3 个 [DUMMY] + 1 个真实）
 
@@ -510,334 +410,8 @@ output/
 
 ---
 
-## ReAct 闭环详解
+## 声明
 
-Orchestrator 的 `_react_orchestrate_one(target_topic)` 跑一次完整闭环：
+- **代码**: 本项目代码由 [Minimax Code](https://github.com/MiniMax-AI/MiniMax-Code) 辅助完成
+- **LLM**: 本项目Agent均使用 [DeepSeek-V4-Flash-0731](https://platform.deepseek.com/) 作为LLM
 
-```mermaid
-flowchart TB
-    Start([ReAct target: subject]) --> Read[读 SM 偏好<br/>读者画像/风险偏好/风格/必含披露/目标字数]
-    Read --> Outer[外层 round 1..MAX_OUTER]
-    Outer --> Inner[内层 ReAct<br/>max_rounds=6]
-    Inner --> Call[LLM chat_with_tools<br/>工具:call_researcher/writer/reviewer]
-    Call --> Check{review.passed?}
-    Check -->|true| Done([TASK_COMPLETE])
-    Check -->|false| Reflect[🪞 Self-Reflection<br/>2026-08-05 新增]
-    Reflect --> Parse[解析 issues]
-    Parse --> L{issues 类型}
-    L -->|[CONTEXT] 行业背景缺失| R1[call_researcher<br/>focus_areas=[行业背景]]
-    L -->|[DATA] tool_data 缺类| R2[call_researcher<br/>补具体数据]
-    L -->|[LENGTH] 字数过多/不足| W1[call_writer<br/>传 length_target=Y]
-    L -->|[FACTS] 关键事实未体现| W2[call_writer<br/>style_hint 列缺失事实]
-    L -->|其他 issues| W3[call_writer<br/>style_hint 改 prompt]
-    R1 --> Rev[call_reviewer<br/>再次验证]
-    R2 --> Rev
-    W1 --> Rev
-    W2 --> Rev
-    W3 --> Rev
-    Rev --> Check
-    Outer --> MaxRound{到 MAX_OUTER?}
-    MaxRound -->|是| Failed[记 failed_articles<br/>不发布]
-    MaxRound -->|否,passed=true| Done
-```
-
-**关键约束**：
-- 单次 ReAct 内层最多 6 轮工具调用
-- 外层修复循环最多 3 轮
-- 外层用完仍 `passed=False` → 记到 `failed_articles`，**不发**
-
-**🪞 Self-Reflection（2026-08-05 新增）**：
-Round 2+ 时，prompt 头部塞一块「上轮修复自检」：
-- 上轮 article 指标（字数/评分/issue 类型）
-- 上轮你调 writer 时传了什么（length_target / style_hint）
-- 自动推断的反弹根因（如 style_hint 与 length_target 冲突）
-- 提示 LLM **先思考再决策**
-
-让 LLM 自己观察 delta，自己决定策略，不再写死 if-else 规则。
-
----
-
-## Reviewer 四重门禁
-
-```python
-passed = (
-    score >= 85                          # 1. 分数门槛
-    and not any("禁用词" in i for i in issues)
-    and length_passed                    # 2. 字数(确定性)
-    and llm_passed                       # 3. LLM judge(软指标)
-    and facts_covered                    # 4. 关键事实覆盖(2026-08-04 新增)
-    and data_ok                          # 5. tool_data 完整(2026-08-05 新增)
-    # 注意:[CONTEXT] 不 block,只作为信息提示
-)
-```
-
-### 1. 关键事实覆盖检查（2026-08-04 新增）
-
-```mermaid
-flowchart LR
-    A[article.brief_id] --> B[load_brief]
-    B --> C[key_facts 列表]
-    C --> D[规则层<br/>抽关键词]
-    D --> E{每条 fact<br/>关键词命中?}
-    E -->|是| F[covered]
-    E -->|否| G[missing]
-    G --> H{有部分覆盖<br/>且文章 ≥500字?}
-    H -->|是| I[LLM 兜底<br/>语义判定]
-    H -->|否| J[维持 missing]
-    I --> K[更新 missing/covered]
-    F --> L[汇总]
-    J --> L
-    K --> L
-```
-
-**关键词抽取策略**：
-- 冒号后内容优先（"板块内涨停股:风范股份, 汇金通" → ["风范股份", "汇金通"]）
-- 数字+单位（"1.43 亿元" 必须原样出现）
-- 4 字以上中文片段
-- 过滤通用词（板块、个股、涨停、共振 等结构词）
-
-**LLM 兜底**：只对规则层判定 missing 的启用，要求严格："300615 复牌" 不能用 "某股票可能复牌" 代替。
-
----
-
-## 评估体系
-
-### 评估指标（三层）
-
-1. **热点发现质量**：信号数、候选数、平均评分、确信度分布
-2. **内容质量**：草稿数、审核通过数、审核通过率、平均审核分
-3. **业务指标**：发布数、发布率、字数合规率、关键事实覆盖数
-
-### 评估方法
-
-- **自动评估**：每次跑完生成 `output/reports/eval_YYYYMMDD_HHMMSS.md`
-- **健康度等级**：🟢 健康（通过率 ≥ 80%）/ 🟡 一般 / 🔴 异常
-- **失败追踪**：未通过的文章记到 WM.failed_articles，可复盘
-
-### 评估报告样例
-
-```markdown
-# 系统运行评估报告
-
-整体健康度: 🟢 健康
-
-## 1. 热点发现质量
-- 信号总数: 356
-- 候选热点数: 24
-- 行动候选 (mid+): 17
-- 平均评分: 0.66
-
-## 2. 内容质量
-- 草稿数: 5
-- 审核通过数: 5
-- 审核通过率: 100.0%
-- 平均审核分: 100/100
-- 关键事实覆盖率: 100%
-
-## 3. 业务指标
-- 发布数: 5/5
-- 字数合规率: 100%
-- 平均字数: 1738
-```
-
----
-
-## 调试与排查
-
-### 关键文件位置
-
-| 想看什么 | 看哪里 |
-|---------|--------|
-| 跑了哪些步骤 | `output/logs/run_*.log` |
-| 异动是什么 | `output/anomalies/*.json` |
-| 候选有哪些 | `output/candidates/*.json` |
-| 文章引用了哪个 brief | 文章头 `> 研究简报:...` |
-| Brief 全量数据(plan/tool_data/key_facts) | `output/briefs/*.json` |
-| ReAct 怎么决策的 | `output/react_traces/*.json` |
-| LLM 完整 CoT | 日志里的 `🧠 reasoning` 块 |
-| LLM 工具调用 | 日志里的 `🔧 tool_calls` 块 |
-| 失败未发布的文章 | `WM.failed_articles`（不落盘）|
-
-### 常见问题
-
-**Q: 文章数据全是瞎编的（同 1 只股票出现在不同 topic）**  
-A: Researcher 的 plan prompt 之前硬编码了 "002931"，LLM 抄作业。已修：先 `_prefetch_real_symbols()` 拿真实涨停股代码塞到 prompt 里，强制 LLM 从中选。
-
-**Q: 字数过多但还是发布了**  
-A: Reviewer 之前 passed 条件只挡 "禁用词"，[LENGTH] 只扣 5 分（95 分照样过）。已修：passed 必须同时满足 `length_passed + llm_passed + facts_covered + data_ok`。
-
-**Q: Orchestrator 直接 TASK_COMPLETE 没修 issues**  
-A: 加了硬性规则：passed=false 时严禁直接 TASK_COMPLETE，必须先调 writer/researcher 修复再 review。
-
-**Q: 候选 25 个但只发了 5 个**  
-A: 之前 top-1 模式只发 1 个。已切到 Top-N 并行（默认 5 candidates × 3 workers）。
-
-**Q: brief 跑了就丢**  
-A: 已加 `output/briefs/`，每条 brief 落盘 JSON，文章头带路径引用。
-
-**Q: 异常 JSON 里 symbols 重复（同一只股出现 3 次）**  
-A: 之前 3 天扫描时，limit_up 列表没去重。已修：`_detect_board_resonance` 用 `dict.fromkeys()` 去重，`limit_up_count` 也改成去重后的数量（新增 `total_signals` 字段记录原始数）。
-
-**Q: LLM 修字数反而越改越长**  
-A: 因为 style_hint 给了"加内容"指令（"务必补充行业背景"等），与 length_target 冲突。已加 Self-Reflection 机制：round 2+ 把上轮字数 / length_target / style_hint 摆出来，让 LLM 自己看到"上轮传了 length_target=1500 但文章反而变长"，自己决定下轮怎么改。
-
-**Q: Reviewer 提示"行业背景信息缺失"但文章里没用到**  
-A: 这是 `[CONTEXT]` issue，**不 block pass**（只作为信息提示），让 Orchestrator 看到后调 call_researcher 补数据。如果想严格 block，调 reviewer.py 把 `data_ok` 改成也检查 `context_ok`。
-
-**Q: Orchestrator 永远不调 call_researcher 补数据**  
-A: 之前 prompt 写死的「缺数据→call_researcher」规则没生效（Reviewer 实际给的 issue 都是 [LENGTH]/[FACTS]）。已加 `[CONTEXT]` / `[DATA]` 两类 issue：
-- `[CONTEXT] 行业背景信息缺失` → 调 call_researcher + focus_areas=["行业背景"]
-- `[DATA] 研究数据不完整:缺少 XXX` → 调 call_researcher 补具体数据
-
-**Q: 网络超时 / 工具失败**  
-A: 必加 `--no-proxy`（`push2.eastmoney.com` 在 clash 代理下会卡）。失败的工具有重试 + 隔离，单个失败不影响整体。
-
-**Q: plan 步骤报 `asyncio.run() cannot be called from a running event loop`**  
-A: Researcher 内部 `asyncio.run` 嵌套在 orchestrator 的 `tool_executor` 内部会冲突。已修：researcher 用 `_call_handler_sync()` 直接调同步 handler，绕过 asyncio 包装。
-
----
-
-## 已知限制
-
-1. **网络依赖**：部分 akshare 接口（`push2.eastmoney.com`）在某些代理环境不稳定 → 用 `--no-proxy` + `DISABLED_TOOLS` 控制
-2. **Dummy 工具**：`dummy_*` 三个工具返回 mock 数据，实际生产需替换为真实接口
-3. **关键事实抽取**：规则层对非常规格式的 fact 可能漏抽；LLM 兜底时仍可能幻觉
-4. **Episodic Memory 冷启动**：EM 初始为空，需运行积累
-5. **单进程**：当前 `ORCHESTRATOR_MAX_WORKERS=3` 是线程级并行（IO 密集型 OK），CPU 密集型不适用
-
----
-
-## 📋 增量改造日志（2026-08-04 / 05）
-
-本节记录 2026-08-04 起的全部增量改造。前面章节讲的是**整体架构**，这里讲**踩坑修 bug**。
-
-### Researcher 改进
-
-| 改动 | 原因 | 关键文件 |
-|------|------|---------|
-| `_prefetch_real_symbols()`：先跑 `get_limit_up_pool` 把真实股票代码塞到 plan prompt | LLM 之前会编 6 位股票代码（如 `002931`），5 篇文章的财务数据完全相同 | `agents/researcher.py:347` |
-| `_call_handler_sync()`：直接调同步 handler，避开 `asyncio.run()` 嵌套冲突 | plan 步骤在 orchestrator 的 `tool_executor` 内部调 `asyncio.run` 会触发「cannot be called from a running event loop」 | `agents/researcher.py:296` |
-| `get_limit_down_pool` 已加入 registry | 但还没加入 plan prompt，LLM 不知道这个工具存在 | `tools/agent_tools.py` |
-
-### Reviewer 四重门禁（2026-08-05 升级）
-
-```python
-passed = (
-    score >= 85
-    and not any("禁用词" in i for i in issues)
-    and length_passed            # 1. 字数（确定性）
-    and llm_passed               # 2. LLM judge（软指标）
-    and facts_covered            # 3. 关键事实覆盖（2026-08-04 新增）
-    and data_ok                  # 4. tool_data 完整（2026-08-05 新增）
-    # [CONTEXT] 不 block,只作为信息提示
-)
-```
-
-| 检查 | 实现 | 行为 |
-|------|------|------|
-| 字数 | `check_article_length` tool | 不通过 → `[LENGTH]` issue, block pass |
-| LLM judge | `_llm_judge_with_checklist` | 不通过 → `[LLM]` issues, block pass |
-| 关键事实覆盖（2026-08-04 新增）| `_check_key_facts_coverage`：从 `article.brief_id` 读 brief，规则层抽关键词 + LLM 兜底 | 不通过 → `[FACTS] 关键事实未体现: XXX`, block pass |
-| 行业背景（2026-08-05 新增）| `_check_brief_data_completeness`：检查 `industry_context` 是否为空 | `[CONTEXT]` issue, **不 block**（仅提示）|
-| 关键数据完整性（2026-08-05 新增）| 检查 `tool_data` 4 类数据是否齐全 | `[DATA]` issue, block pass |
-
-### Orchestrator 决策机制升级
-
-| 改动 | 关键文件 |
-|------|---------|
-| **Top-N 并行**：默认 5 candidates × 3 workers | `agents/orchestrator.py:598` |
-| **外层 close-loop**：review 不过 → 自动调 writer/researcher 修复 → 再 review，最多 3 轮 | `agents/orchestrator.py:757` |
-| **失败不落盘**：3 轮还没过 → 记到 `failed_articles`，**不发布** | `agents/orchestrator.py:907` |
-| **硬性规则**：review 没过时严禁直接 TASK_COMPLETE | `agents/orchestrator.py:795` |
-| **`[CONTEXT]/[DATA]` → 调 call_researcher**（2026-08-05）| `agents/orchestrator.py:781` |
-| **Self-reflection 机制**（2026-08-05）：让 LLM 自己观察 delta，决定下一步策略 | `agents/orchestrator.py:1042` |
-
-#### Self-reflection 机制（2026-08-05 新增 + 2026-08-05 扩展覆盖）
-
-不再写死的「issue → 工具」映射表。Round 2+ 时，prompt 里塞一块**通用反思 + 具体 hint**：
-
-**通用部分**（所有 issue 都有）：
-```markdown
-## 🪞 上轮修复自检
-
-**上轮 article 指标**:
-  - 字数: 2088
-  - 评分: 95/100
-  - issue 类型: ['LENGTH', 'CONTEXT']
-
-**上轮你调 writer 时传了什么**:
-  - 传了 `length_target=1500`
-  - 传了 `style_hint` 摘要: '专业严谨,务必补充行业背景...'
-
-**请先思考再决策**:
-  1. 上轮我的策略 vs 上轮结果,差距在哪里?
-  2. 这个差距的原因是什么?
-  3. 这轮怎么调整?
-```
-
-**具体 hint**（按 issue 类型自动给修复建议）：
-
-| Issue 类型 | 自动推断的根因 | 修复方向 |
-|-----------|--------------|---------|
-| `[LENGTH]` 字数过多/不足 | `length_target` 没传 / 与 `style_hint` 冲突 / 过度精简 | 调 `call_writer` 传 `length_target=Y`，必要时**不传 style_hint** |
-| `[FACTS]` 关键事实未体现 | 没传 `style_hint` / 描述太抽象 | `style_hint` 列出**具体事实关键词** |
-| `[CONTEXT]` 行业背景缺失 | brief 里就没数据，不是文章问题 | 调 **`call_researcher`** + `focus_areas=['行业背景']` |
-| `[DATA]` tool_data 缺类 | researcher 上轮没跑全 plan | 调 **`call_researcher`** + `focus_areas` 指向缺失的类 |
-| 规则层（缺少风险提示 / 标题）| writer 没遵守硬规则 | `style_hint` 列出**要修的具体规则** |
-| `[LLM]` judge 软指标 | 客观性/深度/可读性/逻辑性不足 | `style_hint` 指出**具体维度** |
-| 🚨 禁用词（致命）| writer 用了禁用词 | `style_hint` 明确**改用近义词** |
-
-**设计逻辑**：
-- **观察**（通用）：指标 + delta，让 LLM 看到自己的动作和结果
-- **解释**（具体 hint）：系统自动算好这是哪类反弹，给修复方向
-- **决策**（LLM 自由）：拿到 hint 后自己决定具体调什么参数
-
-LLM 真实反应（trace final_content 抓到）：
-> "✅ length_check.passed: true — 实际 1790 字,落在建议范围 1050-1950 内(**上轮 2088 超长问题已解决,length_target=1500 生效**)"
-
-LLM 自己观察 delta、自己看到 hint、自己决定下一步。
-
-### 数据落盘 & 可追溯
-
-| 改动 | 文件 | 说明 |
-|------|------|------|
-| Brief 落盘到 `output/briefs/YYYYMMDD_HHMMSS_<subject>_<brief_id>.json` | `tools/persist.py:42` | 文章头 `> 研究简报:output/briefs/...` 引用 |
-| Article 头带 brief 路径（不再下放简报摘要/关键事实到正文）| `agents/orchestrator.py:502` | 正文干净 |
-| 异常去重（`board_resonance` 同一只股 3 天出现算 1 次 unique）| `agents/anomaly_detector.py:78` | 修复前 `symbols: ['神雾节能', '盈峰环境', '神雾节能', '盈峰环境', ...]` |
-| `_short_unwrap` 工具结果截断改成 list-level（不再 string-level 截断）| `tools/llm_client.py` | 避免 JSON 截断导致下游解析失败 |
-
-### 安全 / 配置
-
-| 改动 | 说明 |
-|------|------|
-| API key 走环境变量 | `LLM_API_KEY = ""`（从 `DEEPSEEK_API_KEY` / `DEEPSEEK_API` 读）|
-| `.gitignore` 屏蔽 `output/ cache/ data/ .env *.log` | 不入 GitHub |
-| `disable_proxy.py` 处理 `--no-proxy` | 解决 clash 代理对 `push2.eastmoney.com` 的兼容问题 |
-| `DISABLED_TOOLS` 列出 7 个网络不通的接口 | 避免单点失败拖垮整体 |
-
-### 调试
-
-- 跑出问题先看 `output/logs/run_*.log`（有完整 trace）
-- LLM 完整 CoT 在日志里的 `🧠 reasoning` 块
-- 工具调用在 `🔧 tool_calls` 块
-- ReAct 决策轨迹在 `output/react_traces/YYYYMMDD_HHMMSS.json`
-- 调 `output/briefs/*.json` 查 brief 全量数据（plan / tool_data / key_facts / research_summary）
-
----
-
-## 后续优化方向
-
-- [ ] `get_limit_down_pool` 加入 Researcher plan prompt（跌停信号也用上）
-- [ ] `dummy_*` 工具接真实数据源（雪球/微博/CPI）
-- [ ] Episodic Memory 接向量检索（FAISS / Milvus）
-- [ ] FastAPI 暴露成 HTTP API
-- [ ] React/Vue 管理后台（人工审核界面）
-- [ ] A/B 测试框架（不同 prompt / 不同模型对比）
-- [ ] 流式输出（每篇文章生成完立即推送，不等全部跑完）
-- [ ] Self-reflection 加「累计轮次」维度（第 N 轮还失败就强制换工具，不让 LLM 继续死磕）
-
----
-
-## License
-
-MIT
