@@ -1,0 +1,36 @@
+{
+  "ts": "2026-08-06T18:17:49",
+  "target_topic": "半导体",
+  "rounds": 6,
+  "tool_calls": [
+    {
+      "name": "call_researcher",
+      "args": "{\"topic_subject\": \"半导体\", \"topic_industry\": \"半导体\", \"focus_areas\": [\"板块共振与涨停个股分析\", \"大为股份、锴威特、有研新材、金海通的"
+    },
+    {
+      "name": "call_writer",
+      "args": "{\"research_brief_json\": \"{\\\"brief_id\\\": \\\"brief_1786011340_4244\\\", \\\"topic_id\\\": \\\"topic_1786011333_"
+    },
+    {
+      "name": "call_writer",
+      "args": "{\"research_brief_json\": \"{\\\"brief_id\\\":\\\"brief_1786011340_4244\\\",\\\"topic_id\\\":\\\"topic_1786011333_424"
+    },
+    {
+      "name": "call_reviewer",
+      "args": "{\"article_json\": \"{\\\"article_id\\\":\\\"art_1786011398_4244\\\",\\\"brief_id\\\":\\\"brief_1786011340_4244\\\",\\\"t"
+    },
+    {
+      "name": "call_writer",
+      "args": "{\"research_brief_json\": \"{\\\"brief_id\\\":\\\"brief_1786011340_4244\\\",\\\"topic_id\\\":\\\"topic_1786011333_424"
+    },
+    {
+      "name": "call_reviewer",
+      "args": "{\"article_json\": \"{\\\"article_id\\\":\\\"art_1786011450_4244\\\",\\\"brief_id\\\":\\\"brief_1786011340_4244\\\",\\\"t"
+    }
+  ],
+  "final_content": "{\"success\": true, \"data\": {\"success\": true, \"data\": {\"review_id\": \"rev_1786011469_9557\", \"article_id\": \"art_1786011450_4244\", \"passed\": true, \"score\": 100, \"issues\": [], \"rule_check\": {\"issues\": [], \"deduction\": 0}, \"facts_check\": {\"all_covered\": true, \"total_facts\": 4, \"covered_count\": 4, \"missing_facts\": [], \"covered_facts\": [\"板块内涨停股:锴威特\", \"新闻:688693，重大资产重组\", \"未知 最新报告期20260331:营收 0.65 亿元,归母净利 -0.18 亿元\"], \"details\": [{\"fact\": \"板块内多股共振\", \"covered\": true, \"method\": \"llm\", \"hits\": [\"(LLM 语义判定)\"]},",
+  "preferences": "读者画像: professional_investor, 风险偏好: balanced, 风格: professional, 必含披露: ['投资有风险', '过往业绩不代表未来'], 目标字数: 1500",
+  "n_briefs": 1,
+  "n_articles": 2,
+  "n_reviews": 2
+}

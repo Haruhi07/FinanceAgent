@@ -1,0 +1,254 @@
+{
+  "ts": "2026-08-06T18:15:33",
+  "count": 15,
+  "items": [
+    {
+      "anomaly_type": "board_resonance",
+      "board": "通信设备",
+      "limit_up_count": 10,
+      "total_signals": 13,
+      "symbols": [
+        "欣天科技",
+        "世嘉科技",
+        "通宇通讯",
+        "汇绿生态",
+        "星网锐捷",
+        "恒宝股份",
+        "楚天龙",
+        "武汉凡谷",
+        "广哈通信",
+        "鼎信通讯"
+      ],
+      "score_hint": 0.95,
+      "description": "【板块共振】通信设备 板块 10 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "计算机设",
+      "limit_up_count": 7,
+      "total_signals": 9,
+      "symbols": [
+        "恒银科技",
+        "盛视科技",
+        "万集科技",
+        "新开普",
+        "奔图科技",
+        "新北洋",
+        "飞天诚信"
+      ],
+      "score_hint": 0.8500000000000001,
+      "description": "【板块共振】计算机设 板块 7 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "医疗服务",
+      "limit_up_count": 5,
+      "total_signals": 7,
+      "symbols": [
+        "百花医药",
+        "凯莱英",
+        "药明康德",
+        "创新医疗",
+        "贝瑞基因"
+      ],
+      "score_hint": 0.75,
+      "description": "【板块共振】医疗服务 板块 5 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "电力",
+      "limit_up_count": 3,
+      "total_signals": 3,
+      "symbols": [
+        "新能股份",
+        "金房能源",
+        "惠天热电"
+      ],
+      "score_hint": 0.65,
+      "description": "【板块共振】电力 板块 3 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "IT服务Ⅱ",
+      "limit_up_count": 6,
+      "total_signals": 7,
+      "symbols": [
+        "美利云",
+        "青云科技-U",
+        "奥瑞德",
+        "华胜天成",
+        "达实智能",
+        "博彦科技"
+      ],
+      "score_hint": 0.8,
+      "description": "【板块共振】IT服务Ⅱ 板块 6 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "消费电子",
+      "limit_up_count": 6,
+      "total_signals": 7,
+      "symbols": [
+        "利通电子",
+        "共达电声",
+        "智动力",
+        "波导股份",
+        "环旭电子",
+        "卓翼科技"
+      ],
+      "score_hint": 0.8,
+      "description": "【板块共振】消费电子 板块 6 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "化学制药",
+      "limit_up_count": 4,
+      "total_signals": 4,
+      "symbols": [
+        "哈三联",
+        "双成药业",
+        "罗欣药业",
+        "普洛药业"
+      ],
+      "score_hint": 0.7,
+      "description": "【板块共振】化学制药 板块 4 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "电网设备",
+      "limit_up_count": 5,
+      "total_signals": 7,
+      "symbols": [
+        "风范股份",
+        "信通电子",
+        "宝光股份",
+        "顺钠股份",
+        "新能泰山"
+      ],
+      "score_hint": 0.75,
+      "description": "【板块共振】电网设备 板块 5 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "小金属",
+      "limit_up_count": 3,
+      "total_signals": 5,
+      "symbols": [
+        "云南锗业",
+        "宝武镁业",
+        "东方钽业"
+      ],
+      "score_hint": 0.65,
+      "description": "【板块共振】小金属 板块 3 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "元件",
+      "limit_up_count": 7,
+      "total_signals": 8,
+      "symbols": [
+        "中京电子",
+        "东山精密",
+        "海星股份",
+        "宝鼎科技",
+        "景旺电子",
+        "方正科技",
+        "科翔股份"
+      ],
+      "score_hint": 0.8500000000000001,
+      "description": "【板块共振】元件 板块 7 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "汽车零部",
+      "limit_up_count": 6,
+      "total_signals": 6,
+      "symbols": [
+        "联诚精密",
+        "浙江世宝",
+        "索菱股份",
+        "兴民智通",
+        "常润股份",
+        "山子高科"
+      ],
+      "score_hint": 0.8,
+      "description": "【板块共振】汽车零部 板块 6 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "软件开发",
+      "limit_up_count": 4,
+      "total_signals": 4,
+      "symbols": [
+        "行云科技",
+        "汉仪股份",
+        "泛微网络",
+        "天融信"
+      ],
+      "score_hint": 0.7,
+      "description": "【板块共振】软件开发 板块 4 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "专用设备",
+      "limit_up_count": 3,
+      "total_signals": 3,
+      "symbols": [
+        "和泰机电",
+        "江钨装备",
+        "北方股份"
+      ],
+      "score_hint": 0.65,
+      "description": "【板块共振】专用设备 板块 3 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "半导体",
+      "limit_up_count": 4,
+      "total_signals": 5,
+      "symbols": [
+        "金海通",
+        "大为股份",
+        "有研新材",
+        "锴威特"
+      ],
+      "score_hint": 0.7,
+      "description": "【板块共振】半导体 板块 4 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    },
+    {
+      "anomaly_type": "board_resonance",
+      "board": "化学制品",
+      "limit_up_count": 5,
+      "total_signals": 6,
+      "symbols": [
+        "百合花",
+        "鼎龙科技",
+        "高争民爆",
+        "键邦股份",
+        "宏柏新材"
+      ],
+      "score_hint": 0.75,
+      "description": "【板块共振】化学制品 板块 5 只个股涨停",
+      "ts": "2026-08-06T18:15:33"
+    }
+  ],
+  "input_signal_count": 342,
+  "by_type": {
+    "board_resonance": 15
+  },
+  "source": "anomaly_detector"
+}
