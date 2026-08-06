@@ -1,0 +1,102 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Outfit', sans-serif">
+  <!-- Background -->
+  <rect width="960" height="500" fill="#faf8f3"/>
+
+  <!-- Title (only one line, no SECTION header) -->
+  <text x="480" y="44" text-anchor="middle" font-size="20" font-weight="600" fill="#14171e" font-family="Georgia, 'DM Serif Display', serif">主工作流程:ReAct + Self-Reflection</text>
+
+  <defs>
+    <marker id="arrow-k" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#3a4256"/>
+    </marker>
+    <marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6f5e"/>
+    </marker>
+    <marker id="arrow-o" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#c97b3f"/>
+    </marker>
+  </defs>
+
+  <!-- ============= LEFT: Self-Reflection ============= -->
+  <rect x="40" y="120" width="220" height="260" rx="12" fill="#f0dcc4" stroke="#c97b3f" stroke-width="1.5"/>
+  <text x="150" y="146" text-anchor="middle" font-size="13" fill="#c97b3f" font-weight="600">🪞 Self-Reflection</text>
+  <text x="150" y="164" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">Round 2+ 追加到 prompt</text>
+  <line x1="60" y1="178" x2="240" y2="178" stroke="#c97b3f" opacity="0.4"/>
+
+  <text x="150" y="200" text-anchor="middle" font-size="11" fill="#14171e">· 上轮命令 / prompt</text>
+  <text x="150" y="218" text-anchor="middle" font-size="11" fill="#14171e">· 上轮审阅结果 / issues</text>
+  <text x="150" y="236" text-anchor="middle" font-size="11" fill="#14171e">· 上轮字数 / 评分</text>
+
+  <line x1="60" y1="252" x2="240" y2="252" stroke="#c97b3f" opacity="0.4"/>
+
+  <text x="150" y="274" text-anchor="middle" font-size="11" fill="#c97b3f" font-weight="500">→ 自动推断根因</text>
+  <text x="150" y="290" text-anchor="middle" font-size="11" fill="#c97b3f" font-weight="500">→ 给出修复方向</text>
+
+  <line x1="60" y1="304" x2="240" y2="304" stroke="#c97b3f" opacity="0.4"/>
+  <text x="150" y="322" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">让Orchestrator Agent自己观察、</text>
+  <text x="150" y="338" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">自己决定下一步</text>
+
+  <!-- arrow: Self-Reflection → Orchestrator (append) -->
+  <path d="M 260 230 L 320 230" stroke="#c97b3f" stroke-width="1.5" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-o)"/>
+  <text x="290" y="222" text-anchor="middle" font-size="10" fill="#c97b3f" font-weight="600">append</text>
+
+  <!-- ============= CENTER: Orchestrator Agent ============= -->
+  <rect x="320" y="175" width="300" height="120" rx="14" fill="#fff" stroke="#2f6f5e" stroke-width="2"/>
+  <text x="470" y="202" text-anchor="middle" font-size="14" fill="#2f6f5e" font-weight="700">Orchestrator Agent</text>
+  <text x="470" y="220" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">ReAct Loop</text>
+  <line x1="345" y1="232" x2="595" y2="232" stroke="#d4e3dc"/>
+  <text x="345" y="252" font-size="11" fill="#14171e"><tspan font-weight="600" fill="#2f6f5e">Thought</tspan> · 下一步调哪个子 Agent?传什么参数?</text>
+  <text x="345" y="270" font-size="11" fill="#14171e"><tspan font-weight="600" fill="#2f6f5e">Action</tspan>  · 调 call_researcher / writer / reviewer</text>
+  <text x="345" y="288" font-size="11" fill="#14171e"><tspan font-weight="600" fill="#2f6f5e">Loop</tspan>   · 收到 Observation → 再 Thought,直到结束</text>
+
+  <!-- ============= RIGHT: 3 sub-Agent tools ============= -->
+  <!-- call_researcher (y=100, 与 Orchestrator 顶平齐) -->
+  <rect x="700" y="100" width="220" height="70" rx="10" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+  <text x="810" y="126" text-anchor="middle" font-size="13" fill="#14171e" font-weight="600">call_researcher</text>
+  <text x="810" y="145" text-anchor="middle" font-size="11" fill="#7c7a72">拿数据 / 补背景</text>
+  <text x="810" y="162" text-anchor="middle" font-size="9" fill="#7c7a72" font-style="italic">产 research_brief</text>
+
+  <!-- call_writer (中心对齐 Orchestrator) -->
+  <rect x="700" y="200" width="220" height="70" rx="10" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+  <text x="810" y="226" text-anchor="middle" font-size="13" fill="#14171e" font-weight="600">call_writer</text>
+  <text x="810" y="245" text-anchor="middle" font-size="11" fill="#7c7a72">写 / 重写文章</text>
+  <text x="810" y="262" text-anchor="middle" font-size="9" fill="#7c7a72" font-style="italic">传 length_target / style_hint</text>
+
+  <!-- call_reviewer (y=300, 与 Orchestrator 底平齐) -->
+  <rect x="700" y="300" width="220" height="70" rx="10" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+  <text x="810" y="326" text-anchor="middle" font-size="13" fill="#14171e" font-weight="600">call_reviewer</text>
+  <text x="810" y="345" text-anchor="middle" font-size="11" fill="#7c7a72">审阅 + 给 issues</text>
+  <text x="810" y="362" text-anchor="middle" font-size="9" fill="#7c7a72" font-style="italic">4 重门禁 + 关键事实</text>
+
+  <!-- arrows: Orchestrator → 3 sub-agents (Action, 实线) -->
+  <path d="M 620 200 Q 660 190 685 170" stroke="#3a4256" stroke-width="1.4" fill="none" marker-end="url(#arrow-k)"/>
+  <path d="M 620 235 L 695 270" stroke="#3a4256" stroke-width="1.4" fill="none" marker-end="url(#arrow-k)"/>
+  <path d="M 620 275 Q 660 285 685 340" stroke="#3a4256" stroke-width="1.4" fill="none" marker-end="url(#arrow-k)"/>
+  <text x="660" y="195" font-size="10" fill="#3a4256" font-style="italic">Action</text>
+
+  <!-- arrows: 3 sub-agents → Orchestrator (Observation, 绿色虚线) -->
+  <path d="M 700 170 Q 660 195 620 220" stroke="#2f6f5e" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-g)"/>
+  <path d="M 700 270 L 620 250" stroke="#2f6f5e" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-g)"/>
+  <path d="M 700 340 Q 660 310 620 290" stroke="#2f6f5e" stroke-width="1.4" fill="none" stroke-dasharray="4 3" marker-end="url(#arrow-g)"/>
+  <text x="640" y="385" font-size="10" fill="#2f6f5e" font-style="italic">Observation 回灌 messages</text>
+
+  <!-- ============= Bottom: 关键交互 ============= -->
+  <line x1="60" y1="405" x2="900" y2="405" stroke="#e9e3d6" stroke-dasharray="2 2"/>
+  <text x="60" y="428" font-size="11" fill="#7c7a72" font-weight="600">关键交互</text>
+
+  <text x="60" y="450" font-size="10" fill="#14171e">· Orchestrator 通过 tool call 调用子 Agent,自己组合成 ReAct 循环</text>
+  <text x="60" y="468" font-size="10" fill="#14171e">· 子 Agent 之间不直接通信,所有参数由 Orchestrator 在 prompt 中决定</text>
+  <text x="60" y="486" font-size="10" fill="#14171e">· 审阅结果回灌到Orchestrator,让它自主推断原因</text>
+
+  <!-- Legend (top-right) -->
+  <g transform="translate(640, 436)">
+    <line x1="0" y1="6" x2="36" y2="6" stroke="#3a4256" stroke-width="1.4"/>
+    <text x="42" y="9" font-size="10" fill="#14171e">Action</text>
+
+    <line x1="100" y1="6" x2="136" y2="6" stroke="#2f6f5e" stroke-width="1.4" stroke-dasharray="4 3"/>
+    <text x="142" y="9" font-size="10" fill="#14171e">Observation</text>
+
+    <line x1="225" y1="6" x2="261" y2="6" stroke="#c97b3f" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <text x="267" y="9" font-size="10" fill="#14171e">Reflection</text>
+  </g>
+</svg>

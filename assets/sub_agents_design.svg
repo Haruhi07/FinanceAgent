@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 500" font-family="-apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', 'Outfit', sans-serif">
+  <!-- Background -->
+  <rect width="960" height="500" fill="#faf8f3"/>
+
+  <!-- Title -->
+  <text x="480" y="56" text-anchor="middle" font-size="20" font-weight="600" fill="#14171e" font-family="Georgia, 'DM Serif Display', serif">子 Agent 设计理念:Plan-and-Execute</text>
+
+  <!-- Top caption -->
+  <text x="480" y="88" text-anchor="middle" font-size="12" fill="#7c7a72">每个子 Agent 任务目标明确,按 Plan-and-Execute 范式工作,子 Agent 之间不直接通信</text>
+
+  <defs>
+    <marker id="arrow-g" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#2f6f5e"/>
+    </marker>
+  </defs>
+
+  <!-- ============= Researcher 卡片 ============= -->
+  <g transform="translate(30, 130)">
+    <rect x="0" y="0" width="280" height="290" rx="12" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+    <rect x="0" y="0" width="280" height="8" rx="4" fill="#2f6f5e"/>
+
+    <text x="140" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#2f6f5e">Researcher</text>
+    <text x="140" y="60" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">数据获取</text>
+    <line x1="20" y1="78" x2="260" y2="78" stroke="#e9e3d6"/>
+
+    <!-- PLAN -->
+    <text x="20" y="100" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">PLAN</text>
+    <text x="20" y="122" font-size="11" fill="#14171e">· 生成 5 步研究 plan</text>
+    <text x="20" y="142" font-size="11" fill="#14171e">· 决定调哪些 Tool</text>
+    <text x="20" y="162" font-size="11" fill="#14171e">· 明确数据需求 / 顺序</text>
+
+    <line x1="20" y1="180" x2="260" y2="180" stroke="#e9e3d6"/>
+
+    <!-- EXECUTE -->
+    <text x="20" y="202" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">EXECUTE</text>
+    <text x="20" y="224" font-size="11" fill="#14171e">· 按 plan 顺序取数</text>
+    <text x="20" y="244" font-size="11" fill="#14171e">· 同 Tool 拆 batch 并行</text>
+
+    <line x1="20" y1="262" x2="260" y2="262" stroke="#e9e3d6"/>
+
+    <!-- 输出 -->
+    <text x="20" y="280" font-size="10" fill="#7c7a72" font-style="italic">输出</text>
+    <text x="260" y="281" text-anchor="end" font-size="13" font-weight="600" fill="#2f6f5e">→ research_brief</text>
+  </g>
+
+  <!-- ============= Writer 卡片 ============= -->
+  <g transform="translate(340, 130)">
+    <rect x="0" y="0" width="280" height="290" rx="12" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+    <rect x="0" y="0" width="280" height="8" rx="4" fill="#2f6f5e"/>
+
+    <text x="140" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#2f6f5e">Writer</text>
+    <text x="140" y="60" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">内容生成</text>
+    <line x1="20" y1="78" x2="260" y2="78" stroke="#e9e3d6"/>
+
+    <!-- PLAN -->
+    <text x="20" y="100" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">PLAN</text>
+    <text x="20" y="122" font-size="11" fill="#14171e">· 生成写作策略</text>
+    <text x="20" y="142" font-size="11" fill="#14171e">· angle(切入角度)</text>
+    <text x="20" y="162" font-size="11" fill="#14171e">· data_points / must_include / tone</text>
+
+    <line x1="20" y1="180" x2="260" y2="180" stroke="#e9e3d6"/>
+
+    <!-- EXECUTE -->
+    <text x="20" y="202" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">EXECUTE</text>
+    <text x="20" y="224" font-size="11" fill="#14171e">· 根据策略生成全文</text>
+    <text x="20" y="244" font-size="11" fill="#14171e">· 单次 chat 写完</text>
+
+    <line x1="20" y1="262" x2="260" y2="262" stroke="#e9e3d6"/>
+
+    <!-- 输出 -->
+    <text x="20" y="280" font-size="10" fill="#7c7a72" font-style="italic">输出</text>
+    <text x="260" y="281" text-anchor="end" font-size="13" font-weight="600" fill="#2f6f5e">→ article</text>
+  </g>
+
+  <!-- ============= Reviewer 卡片 ============= -->
+  <g transform="translate(650, 130)">
+    <rect x="0" y="0" width="280" height="290" rx="12" fill="#fff" stroke="#e9e3d6" stroke-width="1.5"/>
+    <rect x="0" y="0" width="280" height="8" rx="4" fill="#2f6f5e"/>
+
+    <text x="140" y="42" text-anchor="middle" font-size="16" font-weight="700" fill="#2f6f5e">Reviewer</text>
+    <text x="140" y="60" text-anchor="middle" font-size="10" fill="#7c7a72" font-style="italic">审阅</text>
+    <line x1="20" y1="78" x2="260" y2="78" stroke="#e9e3d6"/>
+
+    <!-- PLAN -->
+    <text x="20" y="100" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">PLAN</text>
+    <text x="20" y="122" font-size="11" fill="#14171e">· 按 checklist 列审阅项</text>
+    <text x="20" y="142" font-size="11" fill="#14171e">· 决定调哪些 Tool</text>
+    <text x="20" y="162" font-size="11" fill="#14171e">· (4 重门禁 + 关键事实)</text>
+
+    <line x1="20" y1="180" x2="260" y2="180" stroke="#e9e3d6"/>
+
+    <!-- EXECUTE -->
+    <text x="20" y="202" font-size="10" font-weight="700" fill="#2f6f5e" letter-spacing="2">EXECUTE</text>
+    <text x="20" y="224" font-size="11" fill="#14171e">· 逐项审阅文章</text>
+    <text x="20" y="244" font-size="11" fill="#14171e">· 给 issues + score</text>
+
+    <line x1="20" y1="262" x2="260" y2="262" stroke="#e9e3d6"/>
+
+    <!-- 输出 -->
+    <text x="20" y="280" font-size="10" fill="#7c7a72" font-style="italic">输出</text>
+    <text x="260" y="281" text-anchor="end" font-size="13" font-weight="600" fill="#2f6f5e">→ review</text>
+  </g>
+
+  <!-- Bottom: 协同关系 -->
+  <line x1="60" y1="448" x2="900" y2="448" stroke="#e9e3d6" stroke-dasharray="2 2"/>
+  <text x="480" y="472" text-anchor="middle" font-size="11" fill="#7c7a72" font-weight="600">协同关系</text>
+  <text x="480" y="490" text-anchor="middle" font-size="11" fill="#14171e">三个 Agent 围绕同一目标各司其职,由 Orchestrator 决定调度顺序、传什么 prompt</text>
+</svg>
